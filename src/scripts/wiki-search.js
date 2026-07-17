@@ -13,7 +13,13 @@ export function createWikiSearch(searchIndex) {
   const matchesQuery = (page, query) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
-    const haystack = [page.title, page.description, page.tags.join(' '), page.bodyText]
+    const haystack = [
+      page.slug,
+      page.title,
+      page.description,
+      page.tags.join(' '),
+      page.bodyText,
+    ]
       .join(' ')
       .toLowerCase();
     return haystack.includes(q);
