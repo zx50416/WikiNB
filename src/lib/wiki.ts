@@ -44,11 +44,28 @@ function linkifyWikiLinks(html: string): string {
   );
 }
 
+function formatDateField(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const s = String(value).trim();
+  const iso = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  const parsed = new Date(s);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return s.slice(0, 32);
+}
+
 function parseWikiFile(filePath: string, slug: string): WikiPage {
   const raw = fs.readFileSync(filePath, 'utf-8');
   const { data, content } = matter(raw);
   const html = linkifyWikiLinks(marked.parse(content, { async: false }) as string);
   const plain = stripMarkdown(content);
+  const date =
+    formatDateField(data.date) ||
+    formatDateField(data.updated) ||
+    new Date().toISOString().slice(0, 10);
 
   return {
     slug,
@@ -57,8 +74,8 @@ function parseWikiFile(filePath: string, slug: string): WikiPage {
     type: (data.type as WikiPage['type']) || 'note',
     status: (data.status as WikiPage['status']) || 'active',
     tags: (data.tags as string[]) || [],
-    date: (data.date as string) || new Date().toISOString().split('T')[0],
-    updated: data.updated as string | undefined,
+    date,
+    updated: formatDateField(data.updated),
     priority: data.priority as WikiPage['priority'],
     progress: data.progress as number | undefined,
     targetSkill: data.targetSkill as string | undefined,

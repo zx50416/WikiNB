@@ -10,7 +10,7 @@ const base = import.meta.env.BASE_URL;
       <div>
         <h1 class="font-display text-3xl font-bold text-berry-800 md:text-4xl">Rename</h1>
         <p class="mt-2 text-sm text-berry-700/80 md:text-base">
-          重新命名 <code class="rounded bg-pink-50 px-1">wiki/*.md</code> 檔名。僅允許小寫英文、數字與連字號。
+          重新命名 <code class="rounded bg-pink-50 px-1">wiki/*.md</code> 檔名。可使用中文、英文、數字、底線 <code>_</code> 與連字號 <code>-</code>；不可空白或其他符號。
         </p>
       </div>
       <a href={base} class="btn-ghost shrink-0 text-sm">← 首頁</a>
@@ -48,8 +48,6 @@ const base = import.meta.env.BASE_URL;
   const listEl = document.getElementById('rename-list');
   const statusEl = document.getElementById('rename-status');
 
-  const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
   function escapeHtml(text) {
     return String(text ?? '')
       .replace(/&/g, '&amp;')
@@ -61,12 +59,13 @@ const base = import.meta.env.BASE_URL;
   function normalizeInput(value) {
     return String(value || '')
       .trim()
-      .toLowerCase()
       .replace(/\.md$/i, '');
   }
 
   function isValidSlug(slug) {
-    return Boolean(slug) && slug !== 'index' && SLUG_RE.test(slug);
+    if (!slug || slug === 'index' || slug === '.' || slug === '..') return false;
+    if (slug.includes('/') || slug.includes('\\') || slug.includes('..')) return false;
+    return /^[\u4e00-\u9fffA-Za-z0-9_-]+$/.test(slug);
   }
 
   function setStatus(text, isError = false) {
@@ -124,7 +123,7 @@ const base = import.meta.env.BASE_URL;
         msg?.classList.remove('hidden');
         if (!isValidSlug(newSlug)) {
           if (msg) {
-            msg.textContent = '無效：不可空白，僅允許 a-z、0-9 與連字號（如 about-kaine）';
+            msg.textContent = '無效：不可空白；可用中文、英文、數字、_ 與 -';
             msg.className = 'rename-msg mt-2 text-sm text-red-600';
           }
           return;

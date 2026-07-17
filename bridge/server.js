@@ -443,11 +443,12 @@ app.post('/api/ingest', authMiddleware, handleWikiUpload);
 function normalizeWikiSlug(input) {
   const raw = String(input || '')
     .trim()
-    .toLowerCase()
     .replace(/\.md$/i, '');
   if (!raw) return null;
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw)) return null;
-  if (raw === 'index') return null;
+  if (raw === 'index' || raw === '.' || raw === '..') return null;
+  if (raw.includes('/') || raw.includes('\\') || raw.includes('..')) return null;
+  // 允許中文、英文、數字、底線、連字號；不可空白或其他符號
+  if (!/^[\u4e00-\u9fffA-Za-z0-9_-]+$/.test(raw)) return null;
   return raw.slice(0, 80);
 }
 
@@ -494,7 +495,7 @@ app.post('/api/wiki/rename', authMiddleware, (req, res) => {
   }
   if (!newSlug) {
     res.status(400).json({
-      error: '新檔名無效。請用小寫英文、數字與連字號（例如 about-kaine），不可空白或特殊符號。',
+      error: '新檔名無效。可用中文、英文、數字、_ 與 -；不可空白或其他符號。',
     });
     return;
   }
