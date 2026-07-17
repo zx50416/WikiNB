@@ -93,7 +93,12 @@ export function getAllWikiPages(): WikiPage[] {
       const slug = file.replace(/\.md$/, '');
       return parseWikiFile(path.join(WIKI_DIR, file), slug);
     })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => {
+      // 最新在上：優先 updated，否則 date
+      const ta = new Date(a.updated || a.date).getTime();
+      const tb = new Date(b.updated || b.date).getTime();
+      return tb - ta;
+    });
 }
 
 export function getWikiPage(slug: string): WikiPage | undefined {
@@ -115,6 +120,7 @@ export function getAllTags(pages: WikiPage[]): { tag: string; count: number }[] 
 }
 
 export function getSearchIndex(pages: WikiPage[]) {
+  // 維持呼叫端排序（預設最新在上）
   return pages.map((p) => ({
     slug: p.slug,
     title: p.title,
@@ -122,6 +128,7 @@ export function getSearchIndex(pages: WikiPage[]) {
     type: p.type,
     tags: p.tags,
     date: p.date,
+    updated: p.updated,
     html: p.html,
     bodyText: stripMarkdown(p.body),
   }));

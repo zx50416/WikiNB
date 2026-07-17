@@ -12,7 +12,7 @@ export function createWikiSearch(searchIndex) {
 
   const matchesQuery = (page, query) => {
     const q = query.trim().toLowerCase();
-    if (!q) return false;
+    if (!q) return true;
     const haystack = [page.title, page.description, page.tags.join(' '), page.bodyText]
       .join(' ')
       .toLowerCase();
@@ -21,7 +21,7 @@ export function createWikiSearch(searchIndex) {
 
   const filterPages = (query) => {
     const q = query.trim();
-    if (!q) return [];
+    if (!q) return searchIndex;
     return searchIndex.filter((page) => matchesQuery(page, q));
   };
 
@@ -115,28 +115,28 @@ export function createWikiSearch(searchIndex) {
 
   const renderResults = ({ query, resultsEl, emptyEl, metaEl }) => {
     const q = query.trim();
-
-    if (!q) {
-      if (metaEl) metaEl.textContent = `知識庫共有 ${searchIndex.length} 篇筆記，輸入關鍵字後按 Search`;
-      resultsEl.classList.add('hidden');
-      resultsEl.innerHTML = '';
-      if (emptyEl) emptyEl.classList.add('hidden');
-      return;
-    }
-
     const results = filterPages(q);
 
     if (metaEl) {
-      metaEl.textContent = results.length
-        ? `找到 ${results.length} 筆包含「${q}」的筆記`
-        : `沒有找到包含「${q}」的筆記`;
+      if (!q) {
+        metaEl.textContent =
+          results.length > 0
+            ? `共 ${results.length} 篇 · 最新在上 · 輸入關鍵字可即時過濾`
+            : '還沒有筆記';
+      } else {
+        metaEl.textContent = results.length
+          ? `找到 ${results.length} 筆包含「${q}」的筆記（最新在上）`
+          : `沒有找到包含「${q}」的筆記`;
+      }
     }
 
     if (results.length === 0) {
       resultsEl.classList.add('hidden');
       resultsEl.innerHTML = '';
       if (emptyEl) {
-        emptyEl.textContent = `沒有符合「${q}」的結果，試試其他關鍵字。`;
+        emptyEl.textContent = q
+          ? `沒有符合「${q}」的結果，試試其他關鍵字。`
+          : '還沒有 Wiki 筆記。整理好後拖到 Codex 上傳，再同步即可。';
         emptyEl.classList.remove('hidden');
       }
       return;

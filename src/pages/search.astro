@@ -16,7 +16,7 @@ const base = import.meta.env.BASE_URL;
           WikiNB
         </span>
       </h1>
-      <p class="mt-2 text-berry-700/80">依標題、標籤或內文關鍵字過濾 · 點 ▸ 展開 · 點標題進入專頁</p>
+      <p class="mt-2 text-berry-700/80">搜尋與瀏覽同一頁 · 最新在上 · 點 ▸ 展開 · 點標題進入專頁</p>
     </div>
 
     <div class="mx-auto max-w-3xl">
@@ -34,13 +34,9 @@ const base = import.meta.env.BASE_URL;
     <div
       id="search-results"
       data-search-results
-      class="wiki-scroll glass-card mx-auto mt-6 max-w-3xl divide-y divide-pink-100/80 overflow-hidden hidden"
+      class="wiki-scroll glass-card mx-auto mt-6 max-w-3xl divide-y divide-pink-100/80 overflow-hidden"
     ></div>
     <div id="search-empty" class="glass-card mx-auto mt-6 hidden max-w-3xl p-8 text-center text-berry-700/80"></div>
-
-    <p class="mt-8 text-center text-sm md:text-left">
-      <a href={`${base}wiki`} class="font-semibold text-pink-600 hover:text-pink-700">瀏覽全部筆記 →</a>
-    </p>
   </div>
 
   <script>
