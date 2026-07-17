@@ -6,11 +6,15 @@ status: active
 tags:
   - 指南
 date: 2026-07-17
+updated: 2026-07-18
 ---
 
 # 歡迎
 
-這是 **Kainnne** 個人知識庫。筆記由 AI 整理後存放在 `wiki/`，網站會自動呈現。
+這是 **Kainnne** 個人學習知識庫。
+
+你寫 `raw/` 筆記 → AI 整理成 `wiki/` → Codex 幫你回想、複習、延伸思考。  
+網站會顯示 `wiki/`；原始草稿可留在 `raw/`。
 
 ## 內容類型
 
@@ -21,5 +25,6 @@ date: 2026-07-17
 
 ## 相關
 
-- [[example-concept]]
 - [[how-to-add-notes]]
+- [[example-concept]]
+- [[learning-bridge-codex]]

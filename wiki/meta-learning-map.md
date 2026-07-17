@@ -7,6 +7,7 @@ tags:
   - 元資料
   - 學習
 date: 2026-07-17
+updated: 2026-07-18
 ---
 
 # 學習路線總覽
@@ -15,9 +16,9 @@ date: 2026-07-17
 
 ## 進行中
 
-- [[learning-bridge-codex]] — 本機 Bridge 與 Codex（priority: high）
+- [[learning-bridge-codex]] — 本機 Bridge 與 Codex（priority: medium，約 80%）
 
 ## 待規劃
 
-- Astro 部署與 GitHub Pages
-- 與 Me 履歷網站的能力缺口對照
+- 與 Me 履歷網站的能力缺口對照（Gap）
+- Tailscale 外出遠端連線（需要時再設）

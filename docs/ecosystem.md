@@ -77,45 +77,36 @@ relatedSkills:
 
 ---
 
-## 4. AI 的四種模式
+## 4. AI 可以怎麼幫你（非強制模式）
 
-| 模式 | 觸發 | 做什麼 |
-|------|------|--------|
-| **Recall** | 「我筆記裡 XXX 是什麼？」 | 搜 wiki，根據筆記回答 |
-| **Review** | 「複習上週 ML 筆記」 | 摘要 + 自測 |
-| **Direction** | 「我現在該學什麼？」 | 看 learning 頁 + priority |
-| **Gap** | 「我還缺什麼能力？」 | Me skills vs wiki 進度 |
+Codex／Cursor 是**自由學習助理**，可讀 `wiki/` 與 `raw/`。常見用法包括：
 
-### Gap 分析流程
+| 用途 | 例子 |
+|------|------|
+| 回想彙整 | 「我之前關於 LLM 寫過什麼？」 |
+| 複習 | 「幫我出幾題自測」 |
+| 方向 | 「接下來該補什麼？」 |
+| 缺口 | 對照 Me skills 與 wiki 進度 |
+| 看 raw | 「inbox 這份 MFCC 筆記在講什麼？」 |
 
-```
-Me v1/data.js (skills, projects)
-        ↓
-WikiNB wiki/ (note, learning, progress)
-        ↓
-config/skills-vocabulary.json（對照標籤）
-        ↓
-更新 meta-gap-analysis.md 或 /ask 直接回答
-```
+不需要把自己鎖成「只能念 wiki、沒寫就說不知道」。
+
+Gap 若要做：讀 `../resume-website/v1/data.js` + `wiki/` + `config/skills-vocabulary.json`。
 
 ---
 
-## 5. 網站頁面
+## 5. 網站頁面（現況）
 
-| 頁面 | 路徑 | 狀態 | 功能 |
-|------|------|------|------|
-| 首頁 | `/` | ✅ | Kainnne、搜尋、最近更新、Wiki 筆記入口 |
-| Wiki 筆記 | `/wiki` | ✅ | 滾動式列表，點選展開 |
-| 單篇 | `/wiki/[slug]` | ✅ | 獨立頁面 |
-| 搜尋 | `/search` | ✅ | Fuse 模糊搜尋 |
-| 登入 | `/login` | 🔲 占位 | 本機 Bridge 登入 |
-| AI 問答 | `/ask` | 🔲 規劃 | Recall / Direction / Gap |
-| 工作室 | `/studio` | 🔲 規劃 | 上傳 raw、ingest |
+| 頁面 | 路徑 | 狀態 |
+|------|------|------|
+| 首頁 | `/` | ✅ 搜尋、入口、登入後 Codex |
+| Wiki 列表 | `/wiki` | ✅ |
+| 單篇 | `/wiki/[slug]` | ✅ |
+| 搜尋 | `/search` | ✅ |
+| 登入 | `/login` | ✅ 帳密 + 驗證碼 |
+| Codex | `/codex` | ✅ 問答、拖檔存 raw、計時 |
 
-### 導覽
-
-- 左上角：**Kainnne**
-- 右上角：**首頁**、**登入**
+未實作且不再追蹤：`/ask`、`/studio`（功能已由 Codex + Cursor ingest 取代）。
 
 ---
 
@@ -127,24 +118,21 @@ config/skills-vocabulary.json（對照標籤）
 - `config/skills-vocabulary.json` 共享技能詞彙
 - Me 的 projects 可連結 WikiNB（手動更新 `data.js`）
 
-### 中期（Bridge 讀 Me）
-
-本機 Bridge 讀取：
+### 可選：Bridge／AI 讀 Me
 
 ```
 ../resume-website/v1/data.js
 ```
 
-用於 Gap 分析，不 merge 進 wiki。
+用於缺口討論，不 merge 進 wiki。
 
-### 整合原則
+### 原則
 
 | 做 | 不做 |
 |----|------|
 | Me → Kainnne 連結 | 履歷全文複製進 wiki |
 | 共享 skills 詞彙 | 兩站共用 build |
-| AI 讀 Me 做 gap | Me 依賴 WikiNB 才能顯示 |
-| 學完後手動更新 Me | 自動改履歷（需確認） |
+| AI 讀 Me 討論缺口 | Me 依賴 WikiNB 才能顯示 |
 
 ---
 
@@ -152,25 +140,21 @@ config/skills-vocabulary.json（對照標籤）
 
 詳見 [local-codex-bridge.md](./local-codex-bridge.md)。
 
-摘要：
-
-- **Tailscale**（免費）連回家中 Mac
-- **Codex CLI**（ChatGPT Plus 登入，非 API 計費）
-- Mac 離線 → AI 功能不可用，靜態 wiki 仍可瀏覽
+- Tailscale（選用）連回家中 Mac
+- Codex CLI（ChatGPT Plus）
+- Mac 離線 → AI／同步不可用，靜態 wiki 仍可瀏覽
 
 ---
 
-## 8. 實作階段
+## 8. 現況摘要
 
-| 階段 | 內容 | 狀態 |
-|------|------|------|
-| Phase 1 | 靜態 wiki + 搜尋 | ✅ |
-| Phase 1.5 | Kainnne 品牌、note/learning、Wiki accordion、文件 | ✅ |
-| Phase 2 | Bridge + `/ask` | ⏳ |
-| Phase 3 | `/studio` ingest + Tailscale | ⏳ |
-| Phase 4 | 登入、離線提示 | ⏳ |
-| Phase 5 | Gap 分析、launchd 自啟 | ⏳ |
-| Phase 6 | GitHub Pages 部署 | ⏳ 下次對話 |
+| 項目 | 狀態 |
+|------|------|
+| 靜態 wiki + 搜尋 + Pages | ✅ |
+| Bridge 登入／同步／Codex | ✅ |
+| 拖檔存 `raw/inbox` | ✅（不自動 ingest） |
+| Cursor ingest → wiki | ✅（依 `AGENTS.md`） |
+| `/ask`、`/studio` | ❌ 已放棄 |
 
 ---
 
@@ -178,13 +162,13 @@ config/skills-vocabulary.json（對照標籤）
 
 | 文件 | 內容 |
 |------|------|
-| `README.md` | 專案入門 |
-| `AGENTS.md` | AI 整理 wiki 規則 |
+| `README.md` | 入門 |
+| `AGENTS.md` | 專案目的與 ingest |
 | `docs/ecosystem.md` | 本文件 |
-| `docs/local-codex-bridge.md` | Bridge + Codex + Tailscale |
-| `config/sites.json` | 兩站 URL 與角色 |
-| `config/skills-vocabulary.json` | 技能對照表 |
+| `docs/local-codex-bridge.md` | Bridge／Codex 現況 |
+| `config/sites.json` | 兩站 URL |
+| `config/skills-vocabulary.json` | 技能對照 |
 
 ---
 
-*最後更新：2026-07-17*
+*最後更新：2026-07-18*

@@ -2,9 +2,10 @@
 
 家中 Mac 上執行的本機 API，負責：
 
-- Email 驗證碼登入（同一組 6 位數同時寄到兩個信箱）
-- 一鍵同步 wiki → GitHub（觸發 Pages 重新部署）
-- Codex CLI 問答（ChatGPT Plus 訂閱，非 API 計費）
+- Email 驗證碼登入
+- 一鍵同步 `wiki/` → GitHub
+- Codex CLI 學習問答（可讀 wiki／raw，自由延伸）
+- 拖檔上傳 raw（**只存** `raw/inbox/`，不自動整理）
 
 ## 快速設定
 
