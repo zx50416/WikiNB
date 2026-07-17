@@ -2,6 +2,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -351,21 +352,153 @@ function safeInboxFilename(name) {
   return base.endsWith('.md') ? base : `${base}.md`;
 }
 
-function snapshotWiki() {
-  const wikiDir = path.join(PROJECT_ROOT, 'wiki');
-  if (!fs.existsSync(wikiDir)) return { files: [], digest: '' };
-  const files = fs
-    .readdirSync(wikiDir)
-    .filter((f) => f.endsWith('.md'))
-    .sort();
-  const hash = crypto.createHash('sha256');
-  for (const f of files) {
-    hash.update(f);
-    hash.update('\0');
-    hash.update(fs.readFileSync(path.join(wikiDir, f)));
-    hash.update('\0');
+function normalizeSlug(raw) {
+  const s = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.md$/i, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!s || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s)) {
+    return `note-${Date.now()}`;
   }
-  return { files, digest: hash.digest('hex') };
+  return s.slice(0, 80);
+}
+
+function yamlQuote(value) {
+  const s = String(value ?? '');
+  if (/[:#{}[\],&*?|>!%@`"']|\n/.test(s) || s !== s.trim()) {
+    return JSON.stringify(s);
+  }
+  return s;
+}
+
+function buildWikiMarkdown(data) {
+  const today = new Date().toISOString().slice(0, 10);
+  const lines = [
+    '---',
+    `title: ${yamlQuote(data.title)}`,
+    `description: ${yamlQuote(data.description)}`,
+    `type: ${data.type === 'learning' ? 'learning' : 'note'}`,
+    `status: ${['active', 'completed', 'paused', 'archived'].includes(data.status) ? data.status : 'active'}`,
+    'tags:',
+  ];
+  for (const tag of (data.tags || []).slice(0, 5)) {
+    lines.push(`  - ${yamlQuote(tag)}`);
+  }
+  lines.push(`date: ${today}`);
+  if (data.type === 'learning') {
+    if (data.priority) lines.push(`priority: ${yamlQuote(data.priority)}`);
+    if (typeof data.progress === 'number') lines.push(`progress: ${data.progress}`);
+    if (data.targetSkill) lines.push(`targetSkill: ${yamlQuote(data.targetSkill)}`);
+  }
+  if (Array.isArray(data.relatedSkills) && data.relatedSkills.length) {
+    lines.push('relatedSkills:');
+    for (const skill of data.relatedSkills.slice(0, 8)) {
+      lines.push(`  - ${yamlQuote(skill)}`);
+    }
+  }
+  lines.push('---', '');
+  const body = String(data.body_markdown || '').trim();
+  lines.push(body);
+  lines.push('');
+  return lines.join('\n');
+}
+
+function upsertIndexLink(slug, type, label) {
+  const indexPath = path.join(PROJECT_ROOT, 'wiki', 'index.md');
+  let text = fs.existsSync(indexPath)
+    ? fs.readFileSync(indexPath, 'utf8')
+    : '# Kainnne 知識庫索引\n\n## 筆記\n\n## 學習中\n\n## 元資料\n';
+
+  const today = new Date().toISOString().slice(0, 10);
+  text = text.replace(/> 最後更新：\d{4}-\d{2}-\d{2}/, `> 最後更新：${today}`);
+
+  const link = label ? `- [[${slug}]] — ${label}` : `- [[${slug}]]`;
+  const sectionHeader = type === 'learning' ? '## 學習中' : '## 筆記';
+  const nextHeaders = ['## 筆記', '## 學習中', '## 元資料'];
+
+  if (text.includes(`[[${slug}]]`)) {
+    text = text.replace(new RegExp(`^- \\[\\[${slug}\\]\\][^\\n]*$`, 'm'), link);
+    fs.writeFileSync(indexPath, text, 'utf8');
+    return;
+  }
+
+  const headerIdx = text.indexOf(sectionHeader);
+  if (headerIdx === -1) {
+    text += `\n${sectionHeader}\n\n${link}\n`;
+    fs.writeFileSync(indexPath, text, 'utf8');
+    return;
+  }
+
+  const afterHeader = headerIdx + sectionHeader.length;
+  let sectionEnd = text.length;
+  for (const h of nextHeaders) {
+    if (h === sectionHeader) continue;
+    const i = text.indexOf(`\n${h}`, afterHeader);
+    if (i !== -1 && i < sectionEnd) sectionEnd = i;
+  }
+
+  const before = text.slice(0, sectionEnd).replace(/\s*$/, '\n');
+  const after = text.slice(sectionEnd).replace(/^\n*/, '\n');
+  fs.writeFileSync(indexPath, `${before}\n${link}\n${after}`, 'utf8');
+}
+
+function upsertLearningMap(slug, label, priority) {
+  const mapPath = path.join(PROJECT_ROOT, 'wiki', 'meta-learning-map.md');
+  if (!fs.existsSync(mapPath)) return;
+  let text = fs.readFileSync(mapPath, 'utf8');
+  const line = `- [[${slug}]] — ${label || slug}${priority ? `（priority: ${priority}）` : ''}`;
+  if (text.includes(`[[${slug}]]`)) {
+    text = text.replace(new RegExp(`^- \\[\\[${slug}\\]\\][^\\n]*$`, 'm'), line);
+  } else {
+    const marker = '## 進行中';
+    const idx = text.indexOf(marker);
+    if (idx === -1) {
+      text += `\n${marker}\n\n${line}\n`;
+    } else {
+      const insertAt = idx + marker.length;
+      text = `${text.slice(0, insertAt)}\n\n${line}${text.slice(insertAt)}`;
+    }
+  }
+  fs.writeFileSync(mapPath, text, 'utf8');
+}
+
+function archiveInboxFile(safeName) {
+  const from = path.join(PROJECT_ROOT, 'raw', 'inbox', safeName);
+  if (!fs.existsSync(from)) return;
+  const archiveDir = path.join(PROJECT_ROOT, 'raw', 'archive');
+  fs.mkdirSync(archiveDir, { recursive: true });
+  fs.renameSync(from, path.join(archiveDir, safeName));
+}
+
+function parseIngestJson(raw) {
+  const text = String(raw || '').trim();
+  if (!text) throw new Error('Codex 沒有回傳整理結果');
+  try {
+    return JSON.parse(text);
+  } catch {
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) return JSON.parse(fenced[1].trim());
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
+    throw new Error('無法解析 Codex 回傳的 JSON');
+  }
+}
+
+function applyIngestResult(data, safeName) {
+  const slug = normalizeSlug(data.slug);
+  const type = data.type === 'learning' ? 'learning' : 'note';
+  const wikiPath = path.join(PROJECT_ROOT, 'wiki', `${slug}.md`);
+  fs.mkdirSync(path.join(PROJECT_ROOT, 'wiki'), { recursive: true });
+  fs.writeFileSync(wikiPath, buildWikiMarkdown({ ...data, type }), 'utf8');
+  upsertIndexLink(slug, type, data.index_label || data.title);
+  if (type === 'learning') {
+    upsertLearningMap(slug, data.index_label || data.title, data.priority);
+  }
+  archiveInboxFile(safeName);
+  return { slug, type, path: wikiPath };
 }
 
 app.post('/api/ingest', authMiddleware, async (req, res) => {
@@ -386,32 +519,43 @@ app.post('/api/ingest', authMiddleware, async (req, res) => {
   const allowedEffort = new Set(CODEX_EFFORTS.map((e) => e.id));
   const effort = allowedEffort.has(chosenEffort) ? chosenEffort : 'medium';
 
-  const ingestPrompt = `請嚴格依照專案根目錄的 AGENTS.md，將 raw/inbox/${safeName} ingest 到 wiki/。
+  const noteBody = String(content).slice(0, 20000);
+  const ingestPrompt = `你是 Kainnne WikiNB 的整理助手。請把下面這則 raw 筆記整理成一篇 wiki 頁面資料。
 
-要求：
-1. 判斷 type 為 note 或 learning
-2. 建立或更新 wiki/[slug].md（含完整 frontmatter）— 必須實際寫入檔案，不可只口頭描述
-3. 更新 wiki/index.md
-4. 若有 learning 變動，更新 wiki/meta-learning-map.md
-5. 完成後可將 raw/inbox/${safeName} 移到 raw/archive/
-6. 用繁體中文回報：新建/更新了哪些 slug
+規則（依 AGENTS.md）：
+- type 只能是 note 或 learning
+- slug 用小寫英文連字號（例如 llm-basics）
+- title / description / body 用繁體中文
+- body_markdown 不要包含 YAML frontmatter
+- tags 2–5 個
+- note 時：priority 用 medium、progress 用 0、targetSkill 用空字串、relatedSkills 可用空陣列
+- learning 時：填 priority / progress / targetSkill
+- index_label 可用短標題
+- 只輸出符合 schema 的結果，不要改檔案、不要執行指令
 
-只處理這個檔案，不要改動無關檔案。`;
+檔名：${safeName}
 
-  const before = snapshotWiki();
+----- raw 筆記開始 -----
+${noteBody}
+----- raw 筆記結束 -----`;
+
+  const schemaPath = path.join(__dirname, 'ingest-schema.json');
+  const outMsgPath = path.join(os.tmpdir(), `wikinb-ingest-${Date.now()}.json`);
 
   try {
-    const { stdout, stderr } = await execFileAsync(
+    await execFileAsync(
       'codex',
       [
         'exec',
         '--color',
         'never',
         '--sandbox',
-        'workspace-write',
+        'read-only',
         '--ephemeral',
-        '-c',
-        'approval_policy="never"',
+        '--output-schema',
+        schemaPath,
+        '-o',
+        outMsgPath,
         '-m',
         chosenModel,
         '-c',
@@ -426,22 +570,32 @@ app.post('/api/ingest', authMiddleware, async (req, res) => {
       },
     );
 
-    const report = stdout?.trim() || stderr?.trim() || 'ingest 完成';
-    const after = snapshotWiki();
-    const wikiChanged = before.digest !== after.digest;
-
-    if (!wikiChanged) {
+    if (!fs.existsSync(outMsgPath)) {
       res.status(500).json({
-        ok: false,
-        error:
-          'Codex 有回覆，但 wiki/ 沒有任何檔案變更。請再試一次，或改用 Cursor 說「請 ingest」。',
-        detail: report.slice(0, 800),
+        error: 'Ingest 失敗：Codex 沒有寫出整理結果。',
         filename: safeName,
-        wikiBefore: before.files.length,
-        wikiAfter: after.files.length,
       });
       return;
     }
+
+    const rawOut = fs.readFileSync(outMsgPath, 'utf8');
+    try {
+      fs.unlinkSync(outMsgPath);
+    } catch {
+      /* ignore */
+    }
+
+    const data = parseIngestJson(rawOut);
+    if (!data.title || !data.body_markdown) {
+      res.status(500).json({
+        error: 'Ingest 失敗：整理結果缺少 title 或正文。',
+        detail: String(rawOut).slice(0, 500),
+        filename: safeName,
+      });
+      return;
+    }
+
+    const applied = applyIngestResult(data, safeName);
 
     let syncResult = null;
     if (sync) {
@@ -455,9 +609,10 @@ app.post('/api/ingest', authMiddleware, async (req, res) => {
     res.json({
       ok: true,
       filename: safeName,
-      report,
+      slug: applied.slug,
+      type: applied.type,
+      report: data.report_zh || `已建立 wiki/${applied.slug}.md`,
       wikiChanged: true,
-      wikiFiles: after.files,
       synced: Boolean(syncResult?.ok && sync !== false),
       sync: syncResult,
       model: chosenModel,
@@ -467,7 +622,7 @@ app.post('/api/ingest', authMiddleware, async (req, res) => {
     console.error('ingest error:', err);
     const msg = err.stderr || err.message || String(err);
     res.status(500).json({
-      error: 'Ingest 失敗。請確認 Codex CLI 可用，且有寫入 wiki/ 權限。',
+      error: 'Ingest 失敗。請確認 Codex CLI 可用。',
       detail: String(msg).slice(0, 800),
       filename: safeName,
     });

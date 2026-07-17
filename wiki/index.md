@@ -8,6 +8,8 @@
 - [[how-to-add-notes]]
 - [[example-concept]]
 - [[llm-basics]] — LLM 基礎概念
+- [[image-annotation-basics]] — 影像標注基礎
+- [[git-basics]] — Git 基礎概念
 
 ## 學習中
 

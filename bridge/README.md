@@ -25,7 +25,18 @@ npm run bridge
 | `SMTP_USER` / `SMTP_PASS` | Gmail + 應用程式密碼（由主信箱寄給自己） |
 | `CORS_ORIGINS` | 含 `https://zx50416.github.io` |
 
-## 一鍵同步（網頁「同步 Wiki」或拖放 ingest 後）
+## 拖放 raw 筆記（ingest）
+
+拖入 `.md` / `.txt` 後：
+
+1. Bridge 先存到 `raw/inbox/`
+2. Codex **只負責整理成 JSON**（read-only，不直接改檔）
+3. Bridge **自己寫入** `wiki/`、更新 `index.md`、移到 `raw/archive/`
+4. 若 `AUTO_GIT_PUSH=true`，再 push 觸發 Pages
+
+這樣不依賴 Codex 寫檔權限，成功率較高。
+
+## 一鍵同步
 
 在 `bridge/.env` 設定：
 
