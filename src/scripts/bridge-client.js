@@ -98,10 +98,10 @@ export async function syncWiki() {
   return bridgeFetch('/api/sync', { method: 'POST', body: '{}' });
 }
 
-export async function ingestRawNote({ filename, content, sync = true, model, reasoningEffort }) {
-  return bridgeFetch('/api/ingest', {
+export async function uploadRawNote({ filename, content }) {
+  return bridgeFetch('/api/raw/upload', {
     method: 'POST',
-    body: JSON.stringify({ filename, content, sync, model, reasoningEffort }),
+    body: JSON.stringify({ filename, content }),
   });
 }
 

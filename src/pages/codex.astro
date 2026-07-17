@@ -42,7 +42,7 @@ const base = import.meta.env.BASE_URL;
 
       <div id="codex-drop" class="codex-drop" tabindex="0">
         <p class="codex-drop-title">拖入 raw 筆記（.md / .txt）</p>
-        <p class="codex-drop-sub">放開後會整理成 wiki，並嘗試同步到 GitHub</p>
+        <p class="codex-drop-sub">放開後只儲存到本機 raw/inbox，不整理 wiki</p>
         <input id="codex-file" type="file" accept=".md,.txt,text/markdown,text/plain" class="hidden" />
       </div>
 
@@ -70,7 +70,7 @@ const base = import.meta.env.BASE_URL;
     codexChatStream,
     fetchCodexModels,
     stopCodex,
-    ingestRawNote,
+    uploadRawNote,
   } from '../scripts/bridge-client.js';
 
   const gate = document.getElementById('codex-gate');
@@ -100,6 +100,27 @@ const base = import.meta.env.BASE_URL;
     output?.appendChild(line);
     output?.scrollTo({ top: output.scrollHeight, behavior: 'smooth' });
     return line;
+  }
+
+  /** 顯示 0s → 1s → 2s…，結束時改成「總執行時間：Ns」 */
+  function startElapsedTimer() {
+    const startedAt = Date.now();
+    const line = appendLine('0s', 'system');
+    const bubble = line.querySelector('.codex-bubble');
+    const tick = () => {
+      const sec = Math.floor((Date.now() - startedAt) / 1000);
+      if (bubble) bubble.textContent = `${sec}s`;
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return {
+      stop() {
+        clearInterval(id);
+        const sec = Math.floor((Date.now() - startedAt) / 1000);
+        if (bubble) bubble.textContent = `總執行時間：${sec}s`;
+        return sec;
+      },
+    };
   }
 
   function formatElapsed(ms) {
@@ -188,7 +209,7 @@ const base = import.meta.env.BASE_URL;
     abortController?.abort();
   });
 
-  async function handleIngestFile(file) {
+  async function handleUploadFile(file) {
     if (!file || running) return;
     const name = file.name || 'note.md';
     if (!/\.(md|txt)$/i.test(name) && !file.type.startsWith('text/')) {
@@ -202,28 +223,18 @@ const base = import.meta.env.BASE_URL;
       return;
     }
 
-    const model = modelSelect?.value || '';
-    const reasoningEffort = effortSelect?.value || 'medium';
     appendLine(`上傳 raw：${name}`, 'user');
-    appendLine('正在整理成 wiki（大約需要 1–3 分鐘）…', 'system');
+    appendLine('正在儲存到 raw/inbox…', 'system');
     setRunning(true);
+    const timer = startElapsedTimer();
 
     try {
-      const result = await ingestRawNote({
-        filename: name,
-        content,
-        sync: true,
-        model,
-        reasoningEffort,
-      });
-      appendLine(result.report || 'ingest 完成', 'assistant');
-      if (result.sync?.message) {
-        appendLine(result.sync.message, 'system');
-      } else if (result.sync?.error) {
-        appendLine(`Wiki 已整理，但同步失敗：${result.sync.error}`, 'error');
-      }
+      const result = await uploadRawNote({ filename: name, content });
+      timer.stop();
+      appendLine(result.message || `已儲存到 raw/inbox/${result.filename}`, 'assistant');
     } catch (err) {
-      appendLine(err.message || 'Ingest 失敗', 'error');
+      timer.stop();
+      appendLine(err.message || '儲存失敗', 'error');
     } finally {
       setRunning(false);
       input?.focus();
@@ -237,7 +248,7 @@ const base = import.meta.env.BASE_URL;
   fileInput?.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     fileInput.value = '';
-    await handleIngestFile(file);
+    await handleUploadFile(file);
   });
 
   ;['dragenter', 'dragover'].forEach((evt) => {
@@ -258,7 +269,7 @@ const base = import.meta.env.BASE_URL;
 
   dropZone?.addEventListener('drop', async (e) => {
     const file = e.dataTransfer?.files?.[0];
-    await handleIngestFile(file);
+    await handleUploadFile(file);
   });
 
   form?.addEventListener('submit', async (e) => {
@@ -277,12 +288,13 @@ const base = import.meta.env.BASE_URL;
 
     abortController = new AbortController();
     setRunning(true);
+    const timer = startElapsedTimer();
 
     const progress = document.createElement('div');
     progress.className = 'codex-line codex-line-system';
     const progressBubble = document.createElement('div');
     progressBubble.className = 'codex-bubble';
-    progressBubble.textContent = '啟動中… 已等待 0 秒（簡單問答常要 15–60 秒）';
+    progressBubble.textContent = '啟動中…';
     progress.appendChild(progressBubble);
     output?.appendChild(progress);
 
@@ -302,18 +314,10 @@ const base = import.meta.env.BASE_URL;
 
     let liveText = '';
     let lastSummary = '啟動中';
-    let lastElapsed = 0;
 
-    const updateProgress = (elapsedMs, summary) => {
-      if (typeof elapsedMs === 'number' && elapsedMs > 0) lastElapsed = elapsedMs;
+    const updateProgress = (summary) => {
       if (summary) lastSummary = summary;
-      const waitHint =
-        lastElapsed < 15000
-          ? '（通常還要再等一會兒）'
-          : lastElapsed < 60000
-            ? '（仍在正常範圍）'
-            : '（較大模型／高推理可能要更久，可按停止）';
-      progressBubble.textContent = `${lastSummary}… 已等待 ${formatElapsed(lastElapsed)} ${waitHint}`;
+      progressBubble.textContent = lastSummary;
       output?.scrollTo({ top: output.scrollHeight, behavior: 'smooth' });
     };
 
@@ -321,12 +325,10 @@ const base = import.meta.env.BASE_URL;
       const result = await codexChatStream(
         msg,
         (ev) => {
-          if (ev.type === 'tick') {
-            updateProgress(ev.elapsedMs || 0);
-          } else if (ev.type === 'status') {
-            updateProgress(ev.elapsedMs, ev.message || lastSummary);
+          if (ev.type === 'status') {
+            updateProgress(ev.message || lastSummary);
           } else if (ev.type === 'event') {
-            updateProgress(undefined, ev.summary || ev.eventType || '處理中');
+            updateProgress(ev.summary || ev.eventType || '處理中');
           } else if (ev.type === 'delta' && ev.text) {
             liveText += (liveText ? '\n' : '') + ev.text;
             liveBody.textContent = liveText;
@@ -339,11 +341,11 @@ const base = import.meta.env.BASE_URL;
         { model, reasoningEffort, signal: abortController.signal },
       );
 
+      timer.stop();
       progress.remove();
 
       const finalText = result.answer || liveText || '（無回應）';
 
-      // 把即時區升級成最終回覆，避免同一段文字出現兩次
       liveWrap.className = `codex-line ${result.stopped ? 'codex-line-system' : 'codex-line-assistant'}`;
       liveBubble.innerHTML = '';
       const finalBubble = document.createElement('div');
@@ -369,6 +371,7 @@ const base = import.meta.env.BASE_URL;
         liveWrap.after(details);
       }
     } catch (err) {
+      timer.stop();
       progress.remove();
       liveWrap.remove();
       if (err?.name !== 'AbortError') {
