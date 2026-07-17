@@ -9,7 +9,7 @@ interface Props {
 }
 
 const { title, description = '把零散的筆記，沉澱成隨時能回來查閱的知識庫。' } = Astro.props;
-const fullTitle = title === 'Kiannne' || title === 'WikiNB' ? title : `${title} · WikiNB`;
+const fullTitle = title === 'Kainnne' || title === 'WikiNB' ? title : `${title} · WikiNB`;
 const bridgeJson = JSON.stringify({
   url: bridgeConfig.bridge.url,
   productionUrl: bridgeConfig.bridge.productionUrl,

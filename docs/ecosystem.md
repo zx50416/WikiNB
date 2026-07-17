@@ -1,6 +1,6 @@
-# Kiannne 生態系規劃
+# Kainnne 生態系規劃
 
-> 本文件描述 WikiNB（Kiannne）與 Me 履歷網站的分工、內容模型、AI 能力，以及兩站整合方式。
+> 本文件描述 WikiNB（Kainnne）與 Me 履歷網站的分工、內容模型、AI 能力，以及兩站整合方式。
 
 ---
 
@@ -11,11 +11,11 @@ Projects/
 ├── resume-website/     →  GitHub: zx50416/Me
 │   「我是誰、我能做什麼」
 │
-└── WikiNB/             →  Kiannne
+└── WikiNB/             →  Kainnne
     「我在學什麼、我記了什麼、我還缺什麼」
 ```
 
-| | **Me（履歷網站）** | **Kiannne（WikiNB）** |
+| | **Me（履歷網站）** | **Kainnne（WikiNB）** |
 |---|---|---|
 | **目的** | 對外證明能力 | 對自己學習與複習 |
 | **受眾** | 雇主、合作者、訪客 | 主要是你自己 |
@@ -26,7 +26,7 @@ Projects/
 | **設定** | `config/sites.json` → me | `config/sites.json` → wikinb |
 
 > **Me = 證明我已經會什麼**  
-> **Kiannne = 追蹤我還在學什麼、記了什麼、缺什麼**
+> **Kainnne = 追蹤我還在學什麼、記了什麼、缺什麼**
 
 ---
 
@@ -34,9 +34,9 @@ Projects/
 
 | 項目 | 值 |
 |------|-----|
-| 網站名稱 | **Kiannne** |
+| 網站名稱 | **Kainnne** |
 | 標語 | 把零散的筆記，沉澱成隨時能回來查閱的知識庫。 |
-| /repo 名稱 | WikiNB（技術名），對外品牌 Kiannne |
+| /repo 名稱 | WikiNB（技術名），對外品牌 Kainnne |
 
 ---
 
@@ -104,7 +104,7 @@ config/skills-vocabulary.json（對照標籤）
 
 | 頁面 | 路徑 | 狀態 | 功能 |
 |------|------|------|------|
-| 首頁 | `/` | ✅ | Kiannne、搜尋、最近更新、Wiki 筆記入口 |
+| 首頁 | `/` | ✅ | Kainnne、搜尋、最近更新、Wiki 筆記入口 |
 | Wiki 筆記 | `/wiki` | ✅ | 滾動式列表，點選展開 |
 | 單篇 | `/wiki/[slug]` | ✅ | 獨立頁面 |
 | 搜尋 | `/search` | ✅ | Fuse 模糊搜尋 |
@@ -114,7 +114,7 @@ config/skills-vocabulary.json（對照標籤）
 
 ### 導覽
 
-- 左上角：**Kiannne**
+- 左上角：**Kainnne**
 - 右上角：**首頁**、**登入**
 
 ---
@@ -141,7 +141,7 @@ config/skills-vocabulary.json（對照標籤）
 
 | 做 | 不做 |
 |----|------|
-| Me → Kiannne 連結 | 履歷全文複製進 wiki |
+| Me → Kainnne 連結 | 履歷全文複製進 wiki |
 | 共享 skills 詞彙 | 兩站共用 build |
 | AI 讀 Me 做 gap | Me 依賴 WikiNB 才能顯示 |
 | 學完後手動更新 Me | 自動改履歷（需確認） |
@@ -165,7 +165,7 @@ config/skills-vocabulary.json（對照標籤）
 | 階段 | 內容 | 狀態 |
 |------|------|------|
 | Phase 1 | 靜態 wiki + 搜尋 | ✅ |
-| Phase 1.5 | Kiannne 品牌、note/learning、Wiki accordion、文件 | ✅ |
+| Phase 1.5 | Kainnne 品牌、note/learning、Wiki accordion、文件 | ✅ |
 | Phase 2 | Bridge + `/ask` | ⏳ |
 | Phase 3 | `/studio` ingest + Tailscale | ⏳ |
 | Phase 4 | 登入、離線提示 | ⏳ |

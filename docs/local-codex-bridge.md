@@ -1,9 +1,9 @@
-# Kiannne 本機連線與 Codex 整合設計
+# Kainnne 本機連線與 Codex 整合設計
 
 > **已實作（2026-07）**：Email OTP 登入、`/codex` 終端介面、導覽列「同步 Wiki」、Bridge 在 `bridge/server.js`。
 > 下方部分章節仍為早期設計草案（帳密登入、`/ask`、`/studio`），以實際程式碼為準。
 
-> 本文件描述：登入後如何從 **Kiannne**（WikiNB）網站連到家中 Mac、使用 Codex CLI（ChatGPT Plus 訂閱額度）完成 raw 整理、wiki 生成，以及基於個人資料的問答（Recall / Direction / Gap）。
+> 本文件描述：登入後如何從 **Kainnne**（WikiNB）網站連到家中 Mac、使用 Codex CLI（ChatGPT Plus 訂閱額度）完成 raw 整理、wiki 生成，以及基於個人資料的問答（Recall / Direction / Gap）。
 >
 > 範圍：本機 Bridge + Codex + 遠端連線。兩站分工與內容模型見 [ecosystem.md](./ecosystem.md)；筆記整理規則見 `AGENTS.md`。
 
@@ -19,6 +19,7 @@
 | POST | `/api/auth/logout` | 是 | 登出 |
 | GET | `/api/auth/me` | 是 | 確認已登入 |
 | POST | `/api/sync` | 是 | push `wiki/` 到 GitHub（或本機 build） |
+| POST | `/api/ingest` | 是 | 上傳 raw 內容 → Codex 整理進 wiki → 可選同步 |
 | POST | `/api/codex/chat` | 是 | Codex CLI 問答（read-only sandbox） |
 
 **登入流程（實作版）：**
@@ -194,7 +195,7 @@ codex exec --sandbox workspace-write --ephemeral "請依照 AGENTS.md 整理 raw
 
 ```bash
 # ~/.zshrc 或 Bridge 的 .env（已加入 .gitignore）
-WIKINB_AUTH_USER=kaine
+WIKINB_AUTH_USER=kainnne
 WIKINB_AUTH_PASS=你的強密碼至少20字
 ```
 
@@ -527,7 +528,7 @@ export const BRIDGE_URL =
 |------|------|
 | `README.md` | 專案入門、本地預覽 |
 | `AGENTS.md` | Cursor / Codex ingest 時的 wiki 整理規則 |
-| `docs/ecosystem.md` | Kiannne 與 Me 分工、note/learning 模型、AI 四模式 |
+| `docs/ecosystem.md` | Kainnne 與 Me 分工、note/learning 模型、AI 四模式 |
 | **本文件** | 本機 Bridge、Codex、Tailscale、登入、API 設計 |
 | `config/sites.json` | 兩站 URL；Me 本機路徑 `../resume-website` |
 | `src/` | 靜態網站；`/login` 占位；未來 `/ask`、`/studio` |

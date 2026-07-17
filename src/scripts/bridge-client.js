@@ -98,6 +98,13 @@ export async function syncWiki() {
   return bridgeFetch('/api/sync', { method: 'POST', body: '{}' });
 }
 
+export async function ingestRawNote({ filename, content, sync = true, model, reasoningEffort }) {
+  return bridgeFetch('/api/ingest', {
+    method: 'POST',
+    body: JSON.stringify({ filename, content, sync, model, reasoningEffort }),
+  });
+}
+
 export async function codexChat(message, options = {}) {
   return bridgeFetch('/api/codex/chat', {
     method: 'POST',

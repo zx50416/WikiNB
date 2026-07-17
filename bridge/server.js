@@ -60,7 +60,7 @@ function credentialsOk(username, password) {
 }
 
 async function sendCodeEmail(code) {
-  const subject = `Kiannne WikiNB 登入驗證碼：${code}`;
+  const subject = `Kainnne WikiNB 登入驗證碼：${code}`;
   const text = `你的 WikiNB 登入驗證碼是：${code}\n\n10 分鐘內有效。若不是你本人操作，請忽略此信。`;
 
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
@@ -283,34 +283,129 @@ app.post('/api/codex/stop', authMiddleware, (req, res) => {
 
 app.post('/api/sync', authMiddleware, async (_req, res) => {
   try {
-    let gitPush = false;
+    const result = await runWikiSync();
+    res.json(result);
+  } catch (err) {
+    console.error('sync error:', err);
+    res.status(500).json({ error: '同步失敗', detail: String(err.message || err) });
+  }
+});
 
-    if (process.env.AUTO_GIT_PUSH === 'true' && process.env.GITHUB_TOKEN) {
-      await execFileAsync('git', ['add', 'wiki/'], { cwd: PROJECT_ROOT });
-      await execFileAsync(
-        'git',
-        ['commit', '-m', 'sync: update wiki from Bridge', '--allow-empty'],
-        { cwd: PROJECT_ROOT },
-      ).catch(() => {});
-      await execFileAsync('git', ['push'], {
+async function runWikiSync() {
+  let gitPush = false;
+
+  if (process.env.AUTO_GIT_PUSH === 'true' && process.env.GITHUB_TOKEN) {
+    await execFileAsync('git', ['add', 'wiki/'], { cwd: PROJECT_ROOT });
+    await execFileAsync(
+      'git',
+      ['commit', '-m', 'sync: update wiki from Bridge', '--allow-empty'],
+      { cwd: PROJECT_ROOT },
+    ).catch(() => {});
+    await execFileAsync('git', ['push'], {
+      cwd: PROJECT_ROOT,
+      env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN },
+    });
+    gitPush = true;
+  } else {
+    await execFileAsync('npm', ['run', 'build'], { cwd: PROJECT_ROOT, timeout: 120000 });
+  }
+
+  return {
+    ok: true,
+    message: gitPush
+      ? 'Wiki 已推送至 GitHub，Pages 將自動重新部署'
+      : 'Wiki 已在本機重新建置（dist/）。若要雲端同步，請在 bridge/.env 設定 GITHUB_TOKEN 與 AUTO_GIT_PUSH=true',
+    gitPush,
+  };
+}
+
+function safeInboxFilename(name) {
+  const base = path.basename(String(name || 'note.md')).replace(/[^\w.\-()\u4e00-\u9fff]+/g, '_');
+  if (!base || base === '.' || base === '..') return `note-${Date.now()}.md`;
+  return base.endsWith('.md') ? base : `${base}.md`;
+}
+
+app.post('/api/ingest', authMiddleware, async (req, res) => {
+  const { filename, content, sync = true, model, reasoningEffort } = req.body || {};
+  if (!content || !String(content).trim()) {
+    res.status(400).json({ error: '請提供筆記內容' });
+    return;
+  }
+
+  const inboxDir = path.join(PROJECT_ROOT, 'raw', 'inbox');
+  fs.mkdirSync(inboxDir, { recursive: true });
+  const safeName = safeInboxFilename(filename);
+  const targetPath = path.join(inboxDir, safeName);
+  fs.writeFileSync(targetPath, String(content), 'utf8');
+
+  const chosenModel = String(model || readCodexDefaultModel()).trim();
+  const chosenEffort = String(reasoningEffort || readCodexDefaultEffort()).trim();
+  const allowedEffort = new Set(CODEX_EFFORTS.map((e) => e.id));
+  const effort = allowedEffort.has(chosenEffort) ? chosenEffort : 'medium';
+
+  const ingestPrompt = `請嚴格依照專案根目錄的 AGENTS.md，將 raw/inbox/${safeName} ingest 到 wiki/。
+
+要求：
+1. 判斷 type 為 note 或 learning
+2. 建立或更新 wiki/[slug].md（含完整 frontmatter）
+3. 更新 wiki/index.md
+4. 若有 learning 變動，更新 wiki/meta-learning-map.md
+5. 完成後可將 raw/inbox/${safeName} 移到 raw/archive/
+6. 用繁體中文回報：新建/更新了哪些 slug
+
+只處理這個檔案，不要改動無關檔案。`;
+
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      'codex',
+      [
+        'exec',
+        '--color',
+        'never',
+        '--sandbox',
+        'workspace-write',
+        '--ephemeral',
+        '-m',
+        chosenModel,
+        '-c',
+        `model_reasoning_effort="${effort}"`,
+        '-',
+      ],
+      {
         cwd: PROJECT_ROOT,
-        env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN },
-      });
-      gitPush = true;
-    } else {
-      await execFileAsync('npm', ['run', 'build'], { cwd: PROJECT_ROOT, timeout: 120000 });
+        timeout: 300000,
+        maxBuffer: 10 * 1024 * 1024,
+        input: ingestPrompt,
+      },
+    );
+
+    const report = stdout?.trim() || stderr?.trim() || 'ingest 完成';
+    let syncResult = null;
+    if (sync) {
+      try {
+        syncResult = await runWikiSync();
+      } catch (syncErr) {
+        syncResult = { ok: false, error: String(syncErr.message || syncErr) };
+      }
     }
 
     res.json({
       ok: true,
-      message: gitPush
-        ? 'Wiki 已推送至 GitHub，Pages 將自動重新部署'
-        : 'Wiki 已在本機重新建置（dist/）。若要雲端同步，請在 bridge/.env 設定 GITHUB_TOKEN 與 AUTO_GIT_PUSH=true',
-      gitPush,
+      filename: safeName,
+      report,
+      synced: Boolean(syncResult?.ok && sync !== false),
+      sync: syncResult,
+      model: chosenModel,
+      reasoningEffort: effort,
     });
   } catch (err) {
-    console.error('sync error:', err);
-    res.status(500).json({ error: '同步失敗', detail: String(err.message || err) });
+    console.error('ingest error:', err);
+    const msg = err.stderr || err.message || String(err);
+    res.status(500).json({
+      error: 'Ingest 失敗。請確認 Codex CLI 可用，且有寫入 wiki/ 權限。',
+      detail: String(msg).slice(0, 800),
+      filename: safeName,
+    });
   }
 });
 
@@ -336,7 +431,7 @@ app.post('/api/codex/chat', authMiddleware, async (req, res) => {
     }
   }
 
-  const prompt = `你是 Kiannne WikiNB 助手。根據以下 wiki 筆記回答使用者問題。若筆記中沒有答案，請明確說不知道。回答請簡潔清楚，使用繁體中文。
+  const prompt = `你是 Kainnne WikiNB 助手。根據以下 wiki 筆記回答使用者問題。若筆記中沒有答案，請明確說不知道。回答請簡潔清楚，使用繁體中文。
 
 ${wikiContext}
 

@@ -1,6 +1,6 @@
 {
   "brand": {
-    "name": "Kiannne",
+    "name": "Kainnne",
     "tagline": "把零散的筆記，沉澱成隨時能回來查閱的知識庫。"
   },
   "sites": {
@@ -12,7 +12,7 @@
       "role": "對外展示能力與履歷"
     },
     "wikinb": {
-      "name": "Kiannne",
+      "name": "Kainnne",
       "url": "https://zx50416.github.io/WikiNB/",
       "repo": "https://github.com/zx50416/WikiNB",
       "role": "個人學習與筆記知識庫"

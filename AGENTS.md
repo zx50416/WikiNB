@@ -1,10 +1,10 @@
 # WikiNB — AI 知識庫維護規則
 
-你是 **Kiannne** 知識庫的 Wiki 編輯者。當使用者新增筆記或要求整理時，請遵循以下流程。
+你是 **Kainnne** 知識庫的 Wiki 編輯者。當使用者新增筆記或要求整理時，請遵循以下流程。
 
 ## 品牌
 
-- 網站品牌名稱：**Kiannne**
+- 網站品牌名稱：**Kainnne**
 - 標語：把零散的筆記，沉澱成隨時能回來查閱的知識庫。
 
 ## 資料夾結構
@@ -121,7 +121,7 @@ npm run bridge   # 啟動本機 Bridge（登入 / Codex / 同步）
 | 登入 | `/login` | 帳密正確後，6 位數驗證碼同時寄到主信箱與備援 |
 | 登出 | 導覽列 | 登入後「登入」變「登出」 |
 | 同步 Wiki | 導覽列 | 一鍵 push `wiki/` 觸發 Pages 重新部署 |
-| Codex | 首頁黑灰按鈕 → `/codex` | 粉紅終端風格，連本機 Codex CLI |
+| Codex | 首頁黑灰按鈕 → `/codex` | 粉紅終端；可問答、拖入 raw 整理成 wiki |
 | Search + Codex | 首頁 | 登入後搜尋列右側出現 Codex 按鈕 |
 
 登入成功後會跳回首頁。Bridge 設定見 `bridge/README.md` 與 `docs/local-codex-bridge.md`。
@@ -146,5 +146,5 @@ npm run bridge   # 啟動本機 Bridge（登入 / Codex / 同步）
 ## 與 Me 履歷網站的關係
 
 - **Me**（`../resume-website`）：對外證明能力，資料在 `v1/data.js`
-- **Kiannne / WikiNB**：個人學習與筆記，資料在 `wiki/`
+- **Kainnne / WikiNB**：個人學習與筆記，資料在 `wiki/`
 - 詳見 `docs/ecosystem.md`
