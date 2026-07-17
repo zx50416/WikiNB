@@ -56,7 +56,7 @@ export function createWikiSearch(searchIndex) {
               ${tags}
             </div>
             <a href="${getBase()}wiki/${escapeHtml(page.slug)}" class="wiki-title-link block font-display text-lg font-bold text-berry-800 transition-colors hover:text-pink-600 md:text-xl">
-              ${escapeHtml(page.title)}
+              ${escapeHtml(page.slug)}
             </a>
             <p class="mt-1 line-clamp-2 text-sm text-berry-700/75">${escapeHtml(page.description)}</p>
           </div>
