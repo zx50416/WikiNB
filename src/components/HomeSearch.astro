@@ -23,7 +23,7 @@ const searchAction = action.startsWith('http') ? action : `${base}${action.repla
         type="search"
         name="q"
         placeholder={placeholder}
-        class="search-input py-4 text-lg"
+        class="search-input py-3 text-base sm:py-4 sm:text-lg"
         autocomplete="off"
       />
     </div>
@@ -34,14 +34,24 @@ const searchAction = action.startsWith('http') ? action : `${base}${action.repla
       </button>
     </div>
 
-    <div id="search-actions-dual" class="mt-4 hidden grid grid-cols-2 gap-3">
-      <button type="submit" class="btn-primary justify-center py-3 text-base">
-        Search
-      </button>
+    <div id="search-actions-logged" class="mt-4 hidden space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <button type="submit" class="btn-primary justify-center py-3 text-sm sm:text-base">
+          Search
+        </button>
+        <a
+          href="https://chatgpt.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn-chatgpt justify-center py-3 text-sm sm:text-base"
+        >
+          ChatGPT
+        </a>
+      </div>
       <a
         id="codex-launch-btn"
         href={`${base}codex`}
-        class="btn-codex justify-center py-3 text-base"
+        class="btn-codex w-full justify-center py-3 text-base sm:text-lg"
       >
         Codex
       </a>
@@ -57,7 +67,7 @@ const searchAction = action.startsWith('http') ? action : `${base}${action.repla
     if (!dual) return;
     const loggedIn = isLoggedIn();
     document.getElementById('search-actions-single')?.classList.toggle('hidden', loggedIn);
-    document.getElementById('search-actions-dual')?.classList.toggle('hidden', !loggedIn);
+    document.getElementById('search-actions-logged')?.classList.toggle('hidden', !loggedIn);
   }
 
   updateSearchActions();
@@ -65,6 +75,10 @@ const searchAction = action.startsWith('http') ? action : `${base}${action.repla
 </script>
 
 <style>
+  .btn-chatgpt {
+    @apply inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-2.5 font-display font-semibold text-white shadow-[0_0_20px_rgba(16,185,129,0.28)] transition-all duration-300 hover:scale-[1.02] hover:from-emerald-400 hover:to-teal-500;
+  }
+
   .btn-codex {
     @apply inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-zinc-700 via-zinc-800 to-zinc-900 px-6 py-2.5 font-display font-semibold text-white shadow-[0_0_20px_rgba(0,0,0,0.25)] transition-all duration-300 hover:scale-[1.02] hover:from-zinc-600 hover:to-black;
   }
