@@ -1,15 +1,16 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+const base = import.meta.env.BASE_URL;
 ---
 
 <BaseLayout title="找不到頁面">
   <div class="animate-fadeIn text-center">
     <div class="mb-4 text-6xl">🌙</div>
     <h1 class="font-display text-3xl font-bold text-berry-800">找不到這個頁面</h1>
-    <p class="mt-3 text-berry-700/80">這朵知識花還沒綻放…</p>
+    <p class="mt-3 text-berry-700/80">這個頁面不存在。</p>
     <div class="mt-8 flex justify-center gap-3">
-      <a href="/" class="btn-primary">回到首頁</a>
-      <a href="/search" class="btn-ghost">搜尋筆記</a>
+      <a href={base} class="btn-primary">回到首頁</a>
+      <a href={`${base}search`} class="btn-ghost">搜尋筆記</a>
     </div>
   </div>
 </BaseLayout>

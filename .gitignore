@@ -5,3 +5,7 @@ dist/
 *.log
 .env
 .env.*
+!.env.example
+!**/.env.example
+bridge/node_modules/
+bridge/.env

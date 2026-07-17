@@ -1,0 +1,71 @@
+---
+interface Props {
+  placeholder?: string;
+  action?: string;
+  dualMode?: boolean;
+}
+
+const {
+  placeholder = '輸入關鍵字，找到你的筆記…',
+  action = '/search',
+  dualMode = false,
+} = Astro.props;
+
+const base = import.meta.env.BASE_URL;
+const searchAction = action.startsWith('http') ? action : `${base}${action.replace(/^\//, '')}`;
+---
+
+<div class="home-search w-full" data-dual={dualMode ? 'true' : 'false'}>
+  <form action={searchAction} method="get" class="w-full">
+    <div class="relative w-full">
+      <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-pink-400">🔍</span>
+      <input
+        type="search"
+        name="q"
+        placeholder={placeholder}
+        class="search-input py-4 text-lg"
+        autocomplete="off"
+      />
+    </div>
+
+    <div id="search-actions-single" class="mt-4">
+      <button type="submit" class="btn-primary w-full justify-center py-3 text-base md:text-lg">
+        Search
+      </button>
+    </div>
+
+    <div id="search-actions-dual" class="mt-4 hidden grid grid-cols-2 gap-3">
+      <button type="submit" class="btn-primary justify-center py-3 text-base">
+        Search
+      </button>
+      <a
+        id="codex-launch-btn"
+        href={`${base}codex`}
+        class="btn-codex justify-center py-3 text-base"
+      >
+        Codex
+      </a>
+    </div>
+  </form>
+</div>
+
+<script>
+  import { isLoggedIn } from '../scripts/bridge-client.js';
+
+  function updateSearchActions() {
+    const dual = document.querySelector('.home-search')?.getAttribute('data-dual') === 'true';
+    if (!dual) return;
+    const loggedIn = isLoggedIn();
+    document.getElementById('search-actions-single')?.classList.toggle('hidden', loggedIn);
+    document.getElementById('search-actions-dual')?.classList.toggle('hidden', !loggedIn);
+  }
+
+  updateSearchActions();
+  document.addEventListener('wikinb:auth-change', updateSearchActions);
+</script>
+
+<style>
+  .btn-codex {
+    @apply inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-zinc-700 via-zinc-800 to-zinc-900 px-6 py-2.5 font-display font-semibold text-white shadow-[0_0_20px_rgba(0,0,0,0.25)] transition-all duration-300 hover:scale-[1.02] hover:from-zinc-600 hover:to-black;
+  }
+</style>

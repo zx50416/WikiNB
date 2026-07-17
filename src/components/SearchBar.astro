@@ -3,27 +3,44 @@ interface Props {
   placeholder?: string;
   size?: 'sm' | 'lg';
   action?: string;
+  showButton?: boolean;
+  buttonLabel?: string;
 }
 
 const {
   placeholder = '搜尋筆記…',
   size = 'sm',
   action = '/search',
+  showButton = false,
+  buttonLabel = 'Search',
 } = Astro.props;
+
+const base = import.meta.env.BASE_URL;
+const formAction = action.startsWith('http') ? action : `${base}${action.replace(/^\//, '')}`;
 ---
 
-<form action={action} method="get" class="relative w-full">
-  <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-pink-400">
-    🔍
-  </span>
-  <input
-    type="search"
-    name="q"
-    placeholder={placeholder}
-    class:list={[
-      'search-input',
-      size === 'lg' && 'py-4 text-lg',
-    ]}
-    autocomplete="off"
-  />
+<form action={formAction} method="get" class="w-full">
+  <div class="relative w-full">
+    <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-pink-400">
+      🔍
+    </span>
+    <input
+      type="search"
+      name="q"
+      placeholder={placeholder}
+      class:list={[
+        'search-input',
+        size === 'lg' && 'py-4 text-lg',
+      ]}
+      autocomplete="off"
+    />
+  </div>
+  {showButton && (
+    <button
+      type="submit"
+      class="btn-primary mt-4 w-full justify-center py-3 text-base md:text-lg"
+    >
+      {buttonLabel}
+    </button>
+  )}
 </form>

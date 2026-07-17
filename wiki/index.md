@@ -1,12 +1,18 @@
-# WikiNB 知識庫索引
+# Kiannne 知識庫索引
 
 > 最後更新：2026-07-17
 
-## 指南
+## 筆記
 
-- [[welcome]] — 歡迎頁
-- [[how-to-add-notes]] — 如何新增筆記
+- [[welcome]]
+- [[how-to-add-notes]]
+- [[example-concept]]
 
-## 概念
+## 學習中
 
-- [[example-concept]] — LLM Wiki 模式介紹
+- [[learning-bridge-codex]] — 本機 Bridge 與 Codex 整合
+
+## 元資料
+
+- [[meta-learning-map]] — 學習路線總覽
+- [[meta-gap-analysis]] — 能力缺口分析

@@ -1,0 +1,157 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout title="Codex" description="Kiannne Codex 終端介面">
+  <div class="animate-fadeIn">
+    <div class="mb-4 flex items-end justify-between gap-4">
+      <div>
+        <h1 class="font-display text-3xl font-bold text-berry-800 md:text-4xl">
+          <span class="bg-gradient-to-r from-zinc-700 to-zinc-900 bg-clip-text text-transparent">Codex</span>
+          <span class="ml-2 text-lg font-normal text-pink-500">× Kiannne</span>
+        </h1>
+        <p class="mt-1 text-sm text-berry-700/80">連線本機 Mac · ChatGPT Plus 訂閱額度 · 讀取 wiki 筆記</p>
+      </div>
+      <a href={base} class="btn-ghost shrink-0 text-sm">← 首頁</a>
+    </div>
+
+    <div id="codex-gate" class="glass-card hidden p-8 text-center">
+      <p class="text-berry-700/80">請先 <a href={`${base}login`} class="font-semibold text-pink-600">登入</a> 後使用 Codex。</p>
+    </div>
+
+    <div id="codex-offline" class="glass-card hidden border border-amber-200 bg-amber-50/50 p-6 text-center text-amber-900">
+      本機 Bridge 未連線。Mac 關機或 Bridge 未啟動時無法使用 Codex。
+    </div>
+
+    <div id="codex-terminal" class="codex-terminal hidden">
+      <div id="codex-output" class="codex-output"></div>
+      <form id="codex-form" class="codex-input-row">
+        <span class="codex-prompt">›</span>
+        <input
+          id="codex-input"
+          type="text"
+          class="codex-input"
+          placeholder="問你的 wiki 筆記…"
+          autocomplete="off"
+        />
+        <button type="submit" class="codex-send">送出</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    import { isLoggedIn, checkHealth, codexChat } from '../scripts/bridge-client.js';
+
+    const gate = document.getElementById('codex-gate');
+    const offline = document.getElementById('codex-offline');
+    const terminal = document.getElementById('codex-terminal');
+    const output = document.getElementById('codex-output');
+    const form = document.getElementById('codex-form');
+    const input = document.getElementById('codex-input');
+
+    function appendLine(text, role = 'assistant') {
+      const line = document.createElement('div');
+      line.className = `codex-line codex-line-${role}`;
+      line.textContent = text;
+      output?.appendChild(line);
+      output?.scrollTo({ top: output.scrollHeight, behavior: 'smooth' });
+    }
+
+    async function init() {
+      if (!isLoggedIn()) {
+        gate?.classList.remove('hidden');
+        return;
+      }
+
+      const health = await checkHealth();
+      if (!health.online) {
+        offline?.classList.remove('hidden');
+        return;
+      }
+
+      terminal?.classList.remove('hidden');
+      appendLine('Codex 已連線。輸入問題，我會根據 wiki/ 筆記回答。', 'system');
+      input?.focus();
+    }
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = input?.value?.trim();
+      if (!msg) return;
+
+      appendLine(msg, 'user');
+      input.value = '';
+      input.setAttribute('disabled', 'true');
+
+      const thinking = document.createElement('div');
+      thinking.className = 'codex-line codex-line-system';
+      thinking.textContent = '思考中…';
+      output?.appendChild(thinking);
+
+      try {
+        const res = await codexChat(msg);
+        thinking.remove();
+        appendLine(res.answer || '（無回應）', 'assistant');
+      } catch (err) {
+        thinking.remove();
+        appendLine(err.message || 'Codex 執行失敗', 'error');
+      } finally {
+        input.removeAttribute('disabled');
+        input.focus();
+      }
+    });
+
+    init();
+  </script>
+</BaseLayout>
+
+<style>
+  .codex-terminal {
+    @apply overflow-hidden rounded-2xl border border-pink-200/60 shadow-glass-lg;
+    background: linear-gradient(160deg, #fff5f8 0%, #fce4ec 30%, #f3e5f5 100%);
+  }
+
+  .codex-output {
+    @apply max-h-[min(60vh,520px)] overflow-y-auto px-5 py-5 font-mono text-sm leading-relaxed;
+    min-height: 280px;
+  }
+
+  .codex-line {
+    @apply mb-3 whitespace-pre-wrap rounded-xl px-4 py-3;
+  }
+
+  .codex-line-user {
+    @apply ml-8 bg-white/60 text-berry-800;
+  }
+
+  .codex-line-assistant {
+    @apply mr-4 border border-pink-100 bg-white/50 text-berry-800;
+  }
+
+  .codex-line-system {
+    @apply text-center text-xs text-pink-500/80;
+    background: transparent;
+  }
+
+  .codex-line-error {
+    @apply border border-red-200 bg-red-50/80 text-red-800;
+  }
+
+  .codex-input-row {
+    @apply flex items-center gap-2 border-t border-pink-200/60 bg-zinc-900/90 px-4 py-3;
+  }
+
+  .codex-prompt {
+    @apply font-mono text-lg font-bold text-pink-400;
+  }
+
+  .codex-input {
+    @apply min-w-0 flex-1 bg-transparent font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-500;
+  }
+
+  .codex-send {
+    @apply rounded-full bg-gradient-to-r from-pink-500 to-lavender-400 px-4 py-1.5 text-xs font-bold text-white transition hover:opacity-90;
+  }
+</style>

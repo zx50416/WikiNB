@@ -1,32 +1,35 @@
 ---
 import '../styles/global.css';
 import Header from '../components/Header.astro';
+import bridgeConfig from '../../config/sites.json';
 
 interface Props {
   title: string;
   description?: string;
 }
 
-const { title, description = 'WikiNB — 你的夢幻知識花園' } = Astro.props;
-const fullTitle = title === 'WikiNB' ? title : `${title} · WikiNB`;
+const { title, description = '把零散的筆記，沉澱成隨時能回來查閱的知識庫。' } = Astro.props;
+const fullTitle = title === 'Kiannne' || title === 'WikiNB' ? title : `${title} · WikiNB`;
+const bridgeJson = JSON.stringify({
+  url: bridgeConfig.bridge.url,
+  productionUrl: bridgeConfig.bridge.productionUrl,
+});
 ---
 
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-base={import.meta.env.BASE_URL}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.85em' x='15' font-size='72' font-family='sans-serif' fill='%23ec407a'>K</text></svg>" />
     <title>{fullTitle}</title>
+    <script id="bridge-config" type="application/json" set:html={bridgeJson}></script>
   </head>
   <body class="bg-blobs">
     <Header />
     <main class="mx-auto max-w-6xl px-4 pb-16 pt-24 md:px-8">
       <slot />
     </main>
-    <footer class="border-t border-pink-100/60 bg-white/30 py-8 text-center text-sm text-berry-700/70 backdrop-blur-sm">
-      <p>🌸 WikiNB — 由 AI 整理，由你探索</p>
-    </footer>
   </body>
 </html>

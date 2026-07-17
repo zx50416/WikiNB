@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "bridge:install": "npm install --prefix bridge",
+    "bridge": "npm run start --prefix bridge",
+    "bridge:dev": "npm run dev --prefix bridge"
   },
   "dependencies": {
     "@astrojs/tailwind": "^6.0.2",

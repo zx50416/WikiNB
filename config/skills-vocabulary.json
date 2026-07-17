@@ -1,0 +1,26 @@
+[
+  {
+    "id": "ai-programming",
+    "label": "AI programming",
+    "meSkillGroup": "Programming",
+    "wikinbTags": ["AI", "Codex", "Cursor", "CLI"]
+  },
+  {
+    "id": "machine-learning",
+    "label": "Machine Learning & Data Analysis",
+    "meSkillGroup": "Machine Learning & Data Analysis",
+    "wikinbTags": ["ML", "機器學習", "資料分析"]
+  },
+  {
+    "id": "system-data",
+    "label": "System & Data Processing",
+    "meSkillGroup": "System & Data Processing",
+    "wikinbTags": ["ETL", "API", "資料處理"]
+  },
+  {
+    "id": "web-dev",
+    "label": "Web Development",
+    "meSkillGroup": "Programming",
+    "wikinbTags": ["Astro", "前端", "網站"]
+  }
+]

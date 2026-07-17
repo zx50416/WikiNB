@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.wikinb.bridge</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/npm</string>
+    <string>run</string>
+    <string>bridge</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/kaine/Desktop/Projects/WikiNB</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/wikinb-bridge.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/wikinb-bridge.err</string>
+</dict>
+</plist>
