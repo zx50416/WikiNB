@@ -4,7 +4,7 @@
 
 ## 筆記
 
-- [[welcome]] — 歡迎
+- [[welcomekaine]] — 歡迎
 
 - [[about_kaine]] — about_kaine
 
