@@ -144,6 +144,7 @@ export async function codexChatStream(message, onEvent = () => {}, options = {})
       message,
       model: options.model,
       reasoningEffort: options.reasoningEffort,
+      history: options.history || [],
     }),
     signal: options.signal,
   });

@@ -92,6 +92,8 @@ const base = import.meta.env.BASE_URL;
 
   let abortController = null;
   let running = false;
+  /** @type {{ role: string, content: string }[]} */
+  let chatHistory = [];
 
   function setBubbleText(bubble, text, role = 'assistant') {
     if (!bubble) return;
@@ -336,6 +338,7 @@ const base = import.meta.env.BASE_URL;
     };
 
     try {
+      const historyForRequest = chatHistory.slice(-16);
       const result = await codexChatStream(
         msg,
         (ev) => {
@@ -352,13 +355,25 @@ const base = import.meta.env.BASE_URL;
             liveBody.textContent = liveText;
           }
         },
-        { model, reasoningEffort, signal: abortController.signal },
+        {
+          model,
+          reasoningEffort,
+          signal: abortController.signal,
+          history: historyForRequest,
+        },
       );
 
       timer.stop();
       progress.remove();
 
       const finalText = result.answer || liveText || '（無回應）';
+      chatHistory.push({ role: 'user', content: msg });
+      if (!result.stopped) {
+        chatHistory.push({ role: 'assistant', content: finalText });
+      }
+      if (chatHistory.length > 24) {
+        chatHistory = chatHistory.slice(-24);
+      }
 
       liveWrap.className = `codex-line ${result.stopped ? 'codex-line-system' : 'codex-line-assistant'}`;
       liveBubble.innerHTML = '';

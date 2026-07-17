@@ -385,8 +385,58 @@ app.post('/api/raw/upload', authMiddleware, handleRawUpload);
 // 相容舊前端路徑（僅存檔，不整理 wiki）
 app.post('/api/ingest', authMiddleware, handleRawUpload);
 
+function listDirBasenames(dir, { max = 40, ext } = {}) {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => !f.startsWith('.'))
+    .filter((f) => (ext ? f.endsWith(ext) : true))
+    .sort()
+    .slice(0, max);
+}
+
+function formatHistoryBlock(history) {
+  if (!Array.isArray(history) || history.length === 0) return '';
+  const lines = [];
+  for (const turn of history.slice(-16)) {
+    const role = turn?.role === 'assistant' ? '助手' : '使用者';
+    const text = String(turn?.content || '')
+      .trim()
+      .slice(0, 2500);
+    if (!text) continue;
+    lines.push(`${role}：${text}`);
+  }
+  if (!lines.length) return '';
+  return `\n\n以下是稍早的對話（請延續上下文，不要假裝沒看過）：\n${lines.join('\n\n')}\n`;
+}
+
+function buildCodexChatPrompt(message, history) {
+  const wikiFiles = listDirBasenames(path.join(PROJECT_ROOT, 'wiki'), { ext: '.md' });
+  const inboxFiles = listDirBasenames(path.join(PROJECT_ROOT, 'raw', 'inbox'));
+  const archiveFiles = listDirBasenames(path.join(PROJECT_ROOT, 'raw', 'archive'));
+
+  return `你是 Kainnne WikiNB 專案裡的 Codex 學習助理（本機 CLI）。
+
+角色與風格：
+- 像正常、自由的 GPT：可延伸討論、舉例、教學、推測、腦力激盪；不要過度保守
+- 需要專案現況時，請主動讀取工作區檔案（尤其 AGENTS.md、wiki/、raw/inbox、raw/archive、docs/）
+- 使用者問 raw 筆記、未整理內容、學習延伸時，請盡力協助；可直接讀 raw 檔，不要說「不在 wiki 所以不知道」
+- 只有真的無法取得的資訊才說不知道；「wiki 沒寫」不是拒絕回答的理由
+- 若使用者允許主觀判斷／假設，可以天馬行空，但請標明哪些是推測
+- 使用繁體中文；可用 Markdown
+
+專案快照（可能不完整，詳情請自行讀檔）：
+- 工作目錄：${PROJECT_ROOT}
+- wiki 頁面：${wikiFiles.length ? wikiFiles.join(', ') : '（無）'}
+- raw/inbox：${inboxFiles.length ? inboxFiles.join(', ') : '（空）'}
+- raw/archive：${archiveFiles.length ? archiveFiles.join(', ') : '（空）'}
+${formatHistoryBlock(history)}
+使用者最新問題：
+${String(message || '').trim()}`;
+}
+
 app.post('/api/codex/chat', authMiddleware, async (req, res) => {
-  const { message, model, reasoningEffort } = req.body || {};
+  const { message, model, reasoningEffort, history } = req.body || {};
   if (!message?.trim()) {
     res.status(400).json({ error: '請輸入訊息' });
     return;
@@ -397,21 +447,7 @@ app.post('/api/codex/chat', authMiddleware, async (req, res) => {
   const allowedEffort = new Set(CODEX_EFFORTS.map((e) => e.id));
   const effort = allowedEffort.has(chosenEffort) ? chosenEffort : 'medium';
 
-  const wikiDir = path.join(PROJECT_ROOT, 'wiki');
-  let wikiContext = '';
-  if (fs.existsSync(wikiDir)) {
-    const files = fs.readdirSync(wikiDir).filter((f) => f.endsWith('.md') && f !== 'index.md');
-    for (const file of files.slice(0, 8)) {
-      const content = fs.readFileSync(path.join(wikiDir, file), 'utf-8');
-      wikiContext += `\n--- ${file} ---\n${content.slice(0, 3000)}\n`;
-    }
-  }
-
-  const prompt = `你是 Kainnne WikiNB 助手。根據以下 wiki 筆記回答使用者問題。若筆記中沒有答案，請明確說不知道。回答請簡潔清楚，使用繁體中文。
-
-${wikiContext}
-
-使用者問題：${message.trim()}`;
+  const prompt = buildCodexChatPrompt(message, history);
 
   const authHeader = req.headers.authorization || '';
   const sessionToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
