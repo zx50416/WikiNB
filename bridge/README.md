@@ -6,6 +6,7 @@
 - 同步 `wiki/` → GitHub
 - Codex 問答（讀 wiki，學習／提醒助理）
 - 拖檔上傳到 `wiki/`
+- 網頁重新命名 `wiki/*.md`（Rename）
 
 ## 快速設定
 

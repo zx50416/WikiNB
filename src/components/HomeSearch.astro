@@ -34,24 +34,28 @@ const searchAction = action.startsWith('http') ? action : `${base}${action.repla
       </button>
     </div>
 
-    <div id="search-actions-logged" class="mt-4 hidden space-y-3">
-      <div class="grid grid-cols-2 gap-3">
-        <button type="submit" class="btn-primary justify-center py-3 text-sm sm:text-base">
-          Search
-        </button>
-        <a
-          href="https://chatgpt.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn-chatgpt justify-center py-3 text-sm sm:text-base"
-        >
-          ChatGPT
-        </a>
-      </div>
+    <div id="search-actions-logged" class="mt-4 hidden grid grid-cols-2 gap-3">
+      <button type="submit" class="btn-primary justify-center py-3 text-sm sm:text-base">
+        Search
+      </button>
+      <a
+        href={`${base}rename`}
+        class="btn-rename-nav justify-center py-3 text-sm sm:text-base"
+      >
+        Rename
+      </a>
+      <a
+        href="https://chatgpt.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-dark justify-center py-3 text-sm sm:text-base"
+      >
+        ChatGPT
+      </a>
       <a
         id="codex-launch-btn"
         href={`${base}codex`}
-        class="btn-codex w-full justify-center py-3 text-base sm:text-lg"
+        class="btn-dark justify-center py-3 text-sm sm:text-base"
       >
         Codex
       </a>
@@ -75,11 +79,11 @@ const searchAction = action.startsWith('http') ? action : `${base}${action.repla
 </script>
 
 <style>
-  .btn-chatgpt {
-    @apply inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-2.5 font-display font-semibold text-white shadow-[0_0_20px_rgba(16,185,129,0.28)] transition-all duration-300 hover:scale-[1.02] hover:from-emerald-400 hover:to-teal-500;
+  .btn-rename-nav {
+    @apply inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-teal-400 to-cyan-500 px-6 py-2.5 font-display font-semibold text-white shadow-[0_0_20px_rgba(45,212,191,0.35)] transition-all duration-300 hover:scale-[1.02] hover:from-teal-300 hover:to-cyan-400;
   }
 
-  .btn-codex {
+  .btn-dark {
     @apply inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-zinc-700 via-zinc-800 to-zinc-900 px-6 py-2.5 font-display font-semibold text-white shadow-[0_0_20px_rgba(0,0,0,0.25)] transition-all duration-300 hover:scale-[1.02] hover:from-zinc-600 hover:to-black;
   }
 </style>

@@ -1,0 +1,194 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout title="Rename" description="重新命名 wiki 筆記檔名">
+  <div class="animate-fadeIn mx-auto max-w-2xl">
+    <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 class="font-display text-3xl font-bold text-berry-800 md:text-4xl">Rename</h1>
+        <p class="mt-2 text-sm text-berry-700/80 md:text-base">
+          重新命名 <code class="rounded bg-pink-50 px-1">wiki/*.md</code> 檔名。僅允許小寫英文、數字與連字號。
+        </p>
+      </div>
+      <a href={base} class="btn-ghost shrink-0 text-sm">← 首頁</a>
+    </div>
+
+    <div id="rename-gate" class="glass-card hidden p-6 text-center text-berry-700/80">
+      請先 <a href={`${base}login`} class="font-semibold text-pink-600">登入</a> 後使用。
+    </div>
+
+    <div id="rename-offline" class="glass-card hidden border border-amber-200 bg-amber-50/50 p-6 text-center text-amber-900">
+      本機 Bridge 未連線。請確認 Mac 已開機且 Bridge 正在執行。
+    </div>
+
+    <div id="rename-panel" class="hidden">
+      <p id="rename-status" class="mb-4 text-sm text-berry-600/80"></p>
+      <div id="rename-list" class="space-y-3"></div>
+      <p class="mt-6 text-center text-sm text-berry-600/70">
+        改完後請按右上角「同步 Wiki」推上線。
+      </p>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  import {
+    isLoggedIn,
+    checkHealth,
+    listWikiFiles,
+    renameWikiFile,
+  } from '../scripts/bridge-client.js';
+
+  const gate = document.getElementById('rename-gate');
+  const offline = document.getElementById('rename-offline');
+  const panel = document.getElementById('rename-panel');
+  const listEl = document.getElementById('rename-list');
+  const statusEl = document.getElementById('rename-status');
+
+  const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+  function escapeHtml(text) {
+    return String(text ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function normalizeInput(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\.md$/i, '');
+  }
+
+  function isValidSlug(slug) {
+    return Boolean(slug) && slug !== 'index' && SLUG_RE.test(slug);
+  }
+
+  function setStatus(text, isError = false) {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.classList.toggle('text-red-600', isError);
+    statusEl.classList.toggle('text-berry-600/80', !isError);
+  }
+
+  function renderFiles(files) {
+    if (!listEl) return;
+    if (!files.length) {
+      listEl.innerHTML =
+        '<div class="glass-card p-6 text-center text-berry-700/80">目前沒有可重新命名的筆記。</div>';
+      return;
+    }
+
+    listEl.innerHTML = files
+      .map((f) => {
+        const slug = escapeHtml(f.slug);
+        const title = escapeHtml(f.title || '');
+        return `
+          <div class="glass-card rename-row p-4" data-slug="${slug}">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <span class="tag-badge">${slug}.md</span>
+              <span class="text-sm text-berry-700/75">${title}</span>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="text"
+                class="search-input rename-input flex-1 py-2 text-sm"
+                value="${slug}"
+                spellcheck="false"
+                autocomplete="off"
+                aria-label="新檔名：${slug}"
+              />
+              <button type="button" class="btn-rename rename-save shrink-0 justify-center px-4 py-2 text-sm">
+                儲存檔名
+              </button>
+            </div>
+            <p class="rename-msg mt-2 hidden text-sm"></p>
+          </div>
+        `;
+      })
+      .join('');
+
+    listEl.querySelectorAll('.rename-row').forEach((row) => {
+      const oldSlug = row.getAttribute('data-slug');
+      const input = row.querySelector('.rename-input');
+      const btn = row.querySelector('.rename-save');
+      const msg = row.querySelector('.rename-msg');
+
+      btn?.addEventListener('click', async () => {
+        const newSlug = normalizeInput(input?.value);
+        msg?.classList.remove('hidden');
+        if (!isValidSlug(newSlug)) {
+          if (msg) {
+            msg.textContent = '無效：不可空白，僅允許 a-z、0-9 與連字號（如 about-kaine）';
+            msg.className = 'rename-msg mt-2 text-sm text-red-600';
+          }
+          return;
+        }
+        if (newSlug === oldSlug) {
+          if (msg) {
+            msg.textContent = '檔名未變更';
+            msg.className = 'rename-msg mt-2 text-sm text-berry-600/80';
+          }
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '儲存中…';
+        try {
+          const result = await renameWikiFile({ oldSlug, newSlug });
+          if (msg) {
+            msg.textContent = result.message || '已重新命名';
+            msg.className = 'rename-msg mt-2 text-sm text-emerald-700';
+          }
+          setStatus(`剛更新：${oldSlug} → ${newSlug}。記得同步 Wiki。`);
+          await loadList();
+        } catch (err) {
+          if (msg) {
+            msg.textContent = err.message || '重新命名失敗';
+            msg.className = 'rename-msg mt-2 text-sm text-red-600';
+          }
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '儲存檔名';
+        }
+      });
+    });
+  }
+
+  async function loadList() {
+    const data = await listWikiFiles();
+    renderFiles(data.files || []);
+    setStatus(`共 ${(data.files || []).length} 個檔案`);
+  }
+
+  async function init() {
+    if (!isLoggedIn()) {
+      gate?.classList.remove('hidden');
+      return;
+    }
+    const health = await checkHealth();
+    if (!health.online) {
+      offline?.classList.remove('hidden');
+      return;
+    }
+    panel?.classList.remove('hidden');
+    try {
+      await loadList();
+    } catch (err) {
+      setStatus(err.message || '無法載入列表', true);
+    }
+  }
+
+  init();
+</script>
+
+<style>
+  .btn-rename {
+    @apply inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-teal-400 to-cyan-500 px-5 py-2 font-display font-semibold text-white shadow-[0_0_16px_rgba(45,212,191,0.3)] transition-all hover:scale-[1.02] hover:from-teal-300 hover:to-cyan-400 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+</style>

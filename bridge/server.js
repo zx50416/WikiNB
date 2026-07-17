@@ -440,6 +440,106 @@ app.post('/api/wiki/upload', authMiddleware, handleWikiUpload);
 app.post('/api/raw/upload', authMiddleware, handleWikiUpload);
 app.post('/api/ingest', authMiddleware, handleWikiUpload);
 
+function normalizeWikiSlug(input) {
+  const raw = String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.md$/i, '');
+  if (!raw) return null;
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw)) return null;
+  if (raw === 'index') return null;
+  return raw.slice(0, 80);
+}
+
+function rewriteWikiLinks(text, oldSlug, newSlug) {
+  // [[old]] / [[old|label]]
+  const re = new RegExp(`\\[\\[${oldSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\|[^\\]]*)?\\]\\]`, 'g');
+  return text.replace(re, (_m, label) => `[[${newSlug}${label || ''}]]`);
+}
+
+app.get('/api/wiki/list', authMiddleware, (_req, res) => {
+  try {
+    const wikiDir = path.join(PROJECT_ROOT, 'wiki');
+    if (!fs.existsSync(wikiDir)) {
+      res.json({ ok: true, files: [] });
+      return;
+    }
+    const files = fs
+      .readdirSync(wikiDir)
+      .filter((f) => f.endsWith('.md') && f !== 'index.md')
+      .sort()
+      .map((filename) => {
+        const slug = filename.replace(/\.md$/i, '');
+        const content = fs.readFileSync(path.join(wikiDir, filename), 'utf8');
+        return {
+          filename,
+          slug,
+          title: extractWikiTitle(content, slug),
+        };
+      });
+    res.json({ ok: true, files });
+  } catch (err) {
+    console.error('wiki list error:', err);
+    res.status(500).json({ error: '無法讀取 wiki 列表', detail: String(err.message || err).slice(0, 300) });
+  }
+});
+
+app.post('/api/wiki/rename', authMiddleware, (req, res) => {
+  const oldSlug = normalizeWikiSlug(req.body?.oldSlug || req.body?.from);
+  const newSlug = normalizeWikiSlug(req.body?.newSlug || req.body?.to);
+
+  if (!oldSlug) {
+    res.status(400).json({ error: '原檔名無效' });
+    return;
+  }
+  if (!newSlug) {
+    res.status(400).json({
+      error: '新檔名無效。請用小寫英文、數字與連字號（例如 about-kaine），不可空白或特殊符號。',
+    });
+    return;
+  }
+  if (oldSlug === newSlug) {
+    res.status(400).json({ error: '新檔名與舊檔名相同' });
+    return;
+  }
+
+  const wikiDir = path.join(PROJECT_ROOT, 'wiki');
+  const fromPath = path.join(wikiDir, `${oldSlug}.md`);
+  const toPath = path.join(wikiDir, `${newSlug}.md`);
+
+  if (!fs.existsSync(fromPath)) {
+    res.status(404).json({ error: `找不到 wiki/${oldSlug}.md` });
+    return;
+  }
+  if (fs.existsSync(toPath)) {
+    res.status(409).json({ error: `已存在 wiki/${newSlug}.md，請換一個名字` });
+    return;
+  }
+
+  try {
+    fs.renameSync(fromPath, toPath);
+
+    const wikiFiles = fs.readdirSync(wikiDir).filter((f) => f.endsWith('.md'));
+    for (const file of wikiFiles) {
+      const fp = path.join(wikiDir, file);
+      const before = fs.readFileSync(fp, 'utf8');
+      const after = rewriteWikiLinks(before, oldSlug, newSlug);
+      if (after !== before) fs.writeFileSync(fp, after, 'utf8');
+    }
+
+    res.json({
+      ok: true,
+      oldSlug,
+      newSlug,
+      filename: `${newSlug}.md`,
+      message: `已將 ${oldSlug}.md 重新命名為 ${newSlug}.md（含目錄與交叉連結）。請按「同步 Wiki」上線。`,
+    });
+  } catch (err) {
+    console.error('wiki rename error:', err);
+    res.status(500).json({ error: '重新命名失敗', detail: String(err.message || err).slice(0, 400) });
+  }
+});
+
 function listDirBasenames(dir, { max = 40, ext } = {}) {
   if (!fs.existsSync(dir)) return [];
   return fs

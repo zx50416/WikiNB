@@ -105,6 +105,17 @@ export async function uploadWikiNote({ filename, content }) {
   });
 }
 
+export async function listWikiFiles() {
+  return bridgeFetch('/api/wiki/list');
+}
+
+export async function renameWikiFile({ oldSlug, newSlug }) {
+  return bridgeFetch('/api/wiki/rename', {
+    method: 'POST',
+    body: JSON.stringify({ oldSlug, newSlug }),
+  });
+}
+
 export async function codexChat(message, options = {}) {
   return bridgeFetch('/api/codex/chat', {
     method: 'POST',
