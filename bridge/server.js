@@ -345,14 +345,59 @@ async function runWikiSync() {
   };
 }
 
-function safeInboxFilename(name) {
+function safeWikiFilename(name) {
   const base = path.basename(String(name || 'note.md')).replace(/[^\w.\-()\u4e00-\u9fff]+/g, '_');
   if (!base || base === '.' || base === '..') return `note-${Date.now()}.md`;
   return base.endsWith('.md') ? base : `${base}.md`;
 }
 
-/** 僅儲存到 raw/inbox，不做 AI 整理 */
-async function handleRawUpload(req, res) {
+function extractWikiTitle(content, fallbackSlug) {
+  const m = String(content || '').match(/^---\s*\n[\s\S]*?\ntitle:\s*(.+)\n/m);
+  if (m) {
+    return m[1].trim().replace(/^["']|["']$/g, '');
+  }
+  return fallbackSlug;
+}
+
+function upsertWikiIndexLink(slug, label) {
+  const indexPath = path.join(PROJECT_ROOT, 'wiki', 'index.md');
+  let text = fs.existsSync(indexPath)
+    ? fs.readFileSync(indexPath, 'utf8')
+    : '# Kainnne 知識庫索引\n\n## 筆記\n\n';
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (/> 最後更新：\d{4}-\d{2}-\d{2}/.test(text)) {
+    text = text.replace(/> 最後更新：\d{4}-\d{2}-\d{2}/, `> 最後更新：${today}`);
+  }
+
+  const link = label ? `- [[${slug}]] — ${label}` : `- [[${slug}]]`;
+  if (text.includes(`[[${slug}]]`)) {
+    text = text.replace(new RegExp(`^- \\[\\[${slug}\\]\\][^\\n]*$`, 'm'), link);
+    fs.writeFileSync(indexPath, text, 'utf8');
+    return;
+  }
+
+  const sectionHeader = '## 筆記';
+  const headerIdx = text.indexOf(sectionHeader);
+  if (headerIdx === -1) {
+    text += `\n${sectionHeader}\n\n${link}\n`;
+    fs.writeFileSync(indexPath, text, 'utf8');
+    return;
+  }
+
+  const afterHeader = headerIdx + sectionHeader.length;
+  let sectionEnd = text.length;
+  for (const h of ['## 學習中', '## 元資料']) {
+    const i = text.indexOf(`\n${h}`, afterHeader);
+    if (i !== -1 && i < sectionEnd) sectionEnd = i;
+  }
+  const before = text.slice(0, sectionEnd).replace(/\s*$/, '\n');
+  const after = text.slice(sectionEnd).replace(/^\n*/, '\n');
+  fs.writeFileSync(indexPath, `${before}\n${link}\n${after}`, 'utf8');
+}
+
+/** 儲存整理好的筆記到 wiki/（不經 raw） */
+async function handleWikiUpload(req, res) {
   const { filename, content } = req.body || {};
   if (!content || !String(content).trim()) {
     res.status(400).json({ error: '請提供筆記內容' });
@@ -360,20 +405,29 @@ async function handleRawUpload(req, res) {
   }
 
   try {
-    const inboxDir = path.join(PROJECT_ROOT, 'raw', 'inbox');
-    fs.mkdirSync(inboxDir, { recursive: true });
-    const safeName = safeInboxFilename(filename);
-    const targetPath = path.join(inboxDir, safeName);
+    const wikiDir = path.join(PROJECT_ROOT, 'wiki');
+    fs.mkdirSync(wikiDir, { recursive: true });
+    const safeName = safeWikiFilename(filename);
+    if (safeName === 'index.md') {
+      res.status(400).json({ error: '請勿上傳 index.md，請用其他檔名' });
+      return;
+    }
+    const targetPath = path.join(wikiDir, safeName);
     fs.writeFileSync(targetPath, String(content), 'utf8');
+
+    const slug = safeName.replace(/\.md$/i, '');
+    const title = extractWikiTitle(content, slug);
+    upsertWikiIndexLink(slug, title);
 
     res.json({
       ok: true,
       filename: safeName,
-      path: `raw/inbox/${safeName}`,
-      message: `已儲存到 raw/inbox/${safeName}`,
+      slug,
+      path: `wiki/${safeName}`,
+      message: `已存到 wiki/${safeName}，並更新 index。請按「同步 Wiki」上線。`,
     });
   } catch (err) {
-    console.error('raw upload error:', err);
+    console.error('wiki upload error:', err);
     res.status(500).json({
       error: '儲存失敗',
       detail: String(err.message || err).slice(0, 400),
@@ -381,9 +435,10 @@ async function handleRawUpload(req, res) {
   }
 }
 
-app.post('/api/raw/upload', authMiddleware, handleRawUpload);
-// 相容舊前端路徑（僅存檔，不整理 wiki）
-app.post('/api/ingest', authMiddleware, handleRawUpload);
+app.post('/api/wiki/upload', authMiddleware, handleWikiUpload);
+// 相容舊路徑名稱
+app.post('/api/raw/upload', authMiddleware, handleWikiUpload);
+app.post('/api/ingest', authMiddleware, handleWikiUpload);
 
 function listDirBasenames(dir, { max = 40, ext } = {}) {
   if (!fs.existsSync(dir)) return [];
@@ -412,28 +467,24 @@ function formatHistoryBlock(history) {
 
 function buildCodexChatPrompt(message, history) {
   const wikiFiles = listDirBasenames(path.join(PROJECT_ROOT, 'wiki'), { ext: '.md' });
-  const inboxFiles = listDirBasenames(path.join(PROJECT_ROOT, 'raw', 'inbox'));
-  const archiveFiles = listDirBasenames(path.join(PROJECT_ROOT, 'raw', 'archive'));
 
-  return `你是 Kainnne WikiNB 專案裡的 Codex 學習助理（本機 CLI）。
+  return `你是 Kainnne WikiNB 的 Codex 學習／提醒助理（本機 CLI）。
 
-專案目的（見 AGENTS.md）：
-- 使用者寫 raw 筆記 → AI 整理成 wiki → 你幫他彙整、回想、複習、延伸思考
-- 你不是「只能念 wiki」的機器人；wiki 沒寫也可以回答，需要時請讀 raw/ 與其他檔案
+專案定義（見 AGENTS.md）：
+- 這是使用者的「筆記彙整」與「AI 提醒助理」
+- 筆記已整理好後放在 wiki/；網站可拖檔上傳 wiki，再按同步上線
+- 沒有 raw/ 流程；請以 wiki/ 為主要知識來源
+- 幫他回想寫過什麼、複習、延伸思考、規劃下一步；可自由發揮，不要過度保守
 
 角色與風格：
-- 像正常、自由的 GPT：可延伸討論、舉例、教學、推測、腦力激盪；不要過度保守
-- 需要專案現況時，請主動讀取工作區（AGENTS.md、wiki/、raw/inbox、raw/archive、docs/）
-- 使用者問 raw 原文怎麼寫、怎麼改、在講什麼時，請直接讀檔協助
-- 只有真的無法取得的資訊才說不知道；「wiki 沒寫」不是拒絕理由
-- 若使用者允許主觀判斷／假設，可以天馬行空，但請標明哪些是推測
+- 像正常、自由的 GPT：可延伸、舉例、教學、推測（推測請標明）
+- 需要時請讀 AGENTS.md、wiki/*.md
+- 只有真的沒資訊時才說不知道
 - 使用繁體中文；可用 Markdown
 
-專案快照（可能不完整，詳情請自行讀檔）：
+專案快照：
 - 工作目錄：${PROJECT_ROOT}
 - wiki 頁面：${wikiFiles.length ? wikiFiles.join(', ') : '（無）'}
-- raw/inbox：${inboxFiles.length ? inboxFiles.join(', ') : '（空）'}
-- raw/archive：${archiveFiles.length ? archiveFiles.join(', ') : '（空）'}
 ${formatHistoryBlock(history)}
 使用者最新問題：
 ${String(message || '').trim()}`;

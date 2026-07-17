@@ -1,21 +1,15 @@
 # Kainnne 知識庫索引
 
-> 最後更新：2026-07-17
+> 最後更新：2026-07-18
 
 ## 筆記
 
-- [[welcome]]
-- [[how-to-add-notes]]
-- [[example-concept]]
-- [[llm-basics]] — LLM 基礎概念
-- [[image-annotation-basics]] — 影像標注基礎
-- [[git-basics]] — Git 基礎概念
+- [[welcome]] — 歡迎
 
 ## 學習中
 
-- [[learning-bridge-codex]] — 本機 Bridge 與 Codex 整合
+（尚無）
 
 ## 元資料
 
-- [[meta-learning-map]] — 學習路線總覽
-- [[meta-gap-analysis]] — 能力缺口分析
+（尚無）

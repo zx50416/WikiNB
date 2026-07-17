@@ -41,8 +41,8 @@ const base = import.meta.env.BASE_URL;
       <div id="codex-tips" class="codex-tips"></div>
 
       <div id="codex-drop" class="codex-drop" tabindex="0">
-        <p class="codex-drop-title">拖入 raw 筆記（.md / .txt）</p>
-        <p class="codex-drop-sub">放開後儲存到本機 raw/inbox</p>
+        <p class="codex-drop-title">拖入 wiki 筆記（.md）</p>
+        <p class="codex-drop-sub">放開後存到本機 wiki/，再按「同步 Wiki」上線</p>
         <input id="codex-file" type="file" accept=".md,.txt,text/markdown,text/plain" class="hidden" />
       </div>
 
@@ -71,7 +71,7 @@ const base = import.meta.env.BASE_URL;
     codexChatStream,
     fetchCodexModels,
     stopCodex,
-    uploadRawNote,
+    uploadWikiNote,
   } from '../scripts/bridge-client.js';
 
   marked.setOptions({ breaks: true, gfm: true });
@@ -229,7 +229,7 @@ const base = import.meta.env.BASE_URL;
     if (!file || running) return;
     const name = file.name || 'note.md';
     if (!/\.(md|txt)$/i.test(name) && !file.type.startsWith('text/')) {
-      appendLine('請拖入 .md 或 .txt 文字筆記', 'error');
+      appendLine('請拖入 .md 或 .txt 筆記', 'error');
       return;
     }
 
@@ -239,15 +239,15 @@ const base = import.meta.env.BASE_URL;
       return;
     }
 
-    appendLine(`上傳 raw：${name}`, 'user');
-    appendLine('正在儲存到 raw/inbox…', 'system');
+    appendLine(`上傳 wiki：${name}`, 'user');
+    appendLine('正在存到 wiki/…', 'system');
     setRunning(true);
     const timer = startElapsedTimer();
 
     try {
-      const result = await uploadRawNote({ filename: name, content });
+      const result = await uploadWikiNote({ filename: name, content });
       timer.stop();
-      appendLine(result.message || `已儲存到 raw/inbox/${result.filename}`, 'assistant');
+      appendLine(result.message || `已存到 wiki/${result.filename}`, 'assistant');
     } catch (err) {
       timer.stop();
       appendLine(err.message || '儲存失敗', 'error');
