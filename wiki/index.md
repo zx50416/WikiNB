@@ -7,6 +7,7 @@
 - [[welcome]]
 - [[how-to-add-notes]]
 - [[example-concept]]
+- [[llm-basics]] — LLM 基礎概念
 
 ## 學習中
 

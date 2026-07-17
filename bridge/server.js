@@ -351,6 +351,23 @@ function safeInboxFilename(name) {
   return base.endsWith('.md') ? base : `${base}.md`;
 }
 
+function snapshotWiki() {
+  const wikiDir = path.join(PROJECT_ROOT, 'wiki');
+  if (!fs.existsSync(wikiDir)) return { files: [], digest: '' };
+  const files = fs
+    .readdirSync(wikiDir)
+    .filter((f) => f.endsWith('.md'))
+    .sort();
+  const hash = crypto.createHash('sha256');
+  for (const f of files) {
+    hash.update(f);
+    hash.update('\0');
+    hash.update(fs.readFileSync(path.join(wikiDir, f)));
+    hash.update('\0');
+  }
+  return { files, digest: hash.digest('hex') };
+}
+
 app.post('/api/ingest', authMiddleware, async (req, res) => {
   const { filename, content, sync = true, model, reasoningEffort } = req.body || {};
   if (!content || !String(content).trim()) {
@@ -373,13 +390,15 @@ app.post('/api/ingest', authMiddleware, async (req, res) => {
 
 要求：
 1. 判斷 type 為 note 或 learning
-2. 建立或更新 wiki/[slug].md（含完整 frontmatter）
+2. 建立或更新 wiki/[slug].md（含完整 frontmatter）— 必須實際寫入檔案，不可只口頭描述
 3. 更新 wiki/index.md
 4. 若有 learning 變動，更新 wiki/meta-learning-map.md
 5. 完成後可將 raw/inbox/${safeName} 移到 raw/archive/
 6. 用繁體中文回報：新建/更新了哪些 slug
 
 只處理這個檔案，不要改動無關檔案。`;
+
+  const before = snapshotWiki();
 
   try {
     const { stdout, stderr } = await execFileAsync(
@@ -391,6 +410,8 @@ app.post('/api/ingest', authMiddleware, async (req, res) => {
         '--sandbox',
         'workspace-write',
         '--ephemeral',
+        '-c',
+        'approval_policy="never"',
         '-m',
         chosenModel,
         '-c',
@@ -406,6 +427,22 @@ app.post('/api/ingest', authMiddleware, async (req, res) => {
     );
 
     const report = stdout?.trim() || stderr?.trim() || 'ingest 完成';
+    const after = snapshotWiki();
+    const wikiChanged = before.digest !== after.digest;
+
+    if (!wikiChanged) {
+      res.status(500).json({
+        ok: false,
+        error:
+          'Codex 有回覆，但 wiki/ 沒有任何檔案變更。請再試一次，或改用 Cursor 說「請 ingest」。',
+        detail: report.slice(0, 800),
+        filename: safeName,
+        wikiBefore: before.files.length,
+        wikiAfter: after.files.length,
+      });
+      return;
+    }
+
     let syncResult = null;
     if (sync) {
       try {
@@ -419,6 +456,8 @@ app.post('/api/ingest', authMiddleware, async (req, res) => {
       ok: true,
       filename: safeName,
       report,
+      wikiChanged: true,
+      wikiFiles: after.files,
       synced: Boolean(syncResult?.ok && sync !== false),
       sync: syncResult,
       model: chosenModel,
