@@ -5,4 +5,7 @@ export default defineConfig({
   site: 'https://zx50416.github.io',
   base: '/WikiNB/',
   integrations: [tailwind()],
+  devToolbar: {
+    enabled: false,
+  },
 });
