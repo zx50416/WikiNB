@@ -1,4 +1,4 @@
-# Kainnne 🌸
+# Kainnne
 
 筆記彙整 + AI 提醒助理。
 
