@@ -64,6 +64,7 @@ const base = import.meta.env.BASE_URL;
 </BaseLayout>
 
 <script>
+  import { marked } from 'marked';
   import {
     isLoggedIn,
     checkHealth,
@@ -72,6 +73,8 @@ const base = import.meta.env.BASE_URL;
     stopCodex,
     uploadRawNote,
   } from '../scripts/bridge-client.js';
+
+  marked.setOptions({ breaks: true, gfm: true });
 
   const gate = document.getElementById('codex-gate');
   const offline = document.getElementById('codex-offline');
@@ -90,12 +93,23 @@ const base = import.meta.env.BASE_URL;
   let abortController = null;
   let running = false;
 
+  function setBubbleText(bubble, text, role = 'assistant') {
+    if (!bubble) return;
+    if (role === 'assistant') {
+      bubble.classList.add('codex-md');
+      bubble.innerHTML = marked.parse(String(text ?? ''), { async: false });
+    } else {
+      bubble.classList.remove('codex-md');
+      bubble.textContent = text;
+    }
+  }
+
   function appendLine(text, role = 'assistant') {
     const line = document.createElement('div');
     line.className = `codex-line codex-line-${role}`;
     const bubble = document.createElement('div');
     bubble.className = 'codex-bubble';
-    bubble.textContent = text;
+    setBubbleText(bubble, text, role);
     line.appendChild(bubble);
     output?.appendChild(line);
     output?.scrollTo({ top: output.scrollHeight, behavior: 'smooth' });
@@ -350,7 +364,7 @@ const base = import.meta.env.BASE_URL;
       liveBubble.innerHTML = '';
       const finalBubble = document.createElement('div');
       finalBubble.className = 'codex-bubble';
-      finalBubble.textContent = finalText;
+      setBubbleText(finalBubble, finalText, result.stopped ? 'system' : 'assistant');
       liveWrap.replaceChildren(finalBubble);
 
       if (
@@ -519,6 +533,119 @@ const base = import.meta.env.BASE_URL;
     white-space: pre-wrap;
     overflow-wrap: break-word;
     padding: 0.75rem 1rem;
+  }
+
+  .codex-page .codex-bubble.codex-md {
+    white-space: normal;
+    line-height: 1.55;
+  }
+
+  .codex-page .codex-md > *:first-child {
+    margin-top: 0;
+  }
+
+  .codex-page .codex-md > *:last-child {
+    margin-bottom: 0;
+  }
+
+  .codex-page .codex-md p,
+  .codex-page .codex-md ul,
+  .codex-page .codex-md ol,
+  .codex-page .codex-md pre,
+  .codex-page .codex-md blockquote,
+  .codex-page .codex-md table {
+    margin: 0.5em 0;
+  }
+
+  .codex-page .codex-md h1,
+  .codex-page .codex-md h2,
+  .codex-page .codex-md h3,
+  .codex-page .codex-md h4 {
+    margin: 0.75em 0 0.35em;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #3b0f2e;
+  }
+
+  .codex-page .codex-md h1 {
+    font-size: 1.2em;
+  }
+
+  .codex-page .codex-md h2 {
+    font-size: 1.1em;
+  }
+
+  .codex-page .codex-md h3,
+  .codex-page .codex-md h4 {
+    font-size: 1.05em;
+  }
+
+  .codex-page .codex-md strong {
+    font-weight: 700;
+    color: #3b0f2e;
+  }
+
+  .codex-page .codex-md em {
+    font-style: italic;
+  }
+
+  .codex-page .codex-md ul,
+  .codex-page .codex-md ol {
+    padding-left: 1.25rem;
+  }
+
+  .codex-page .codex-md li {
+    margin: 0.2em 0;
+  }
+
+  .codex-page .codex-md a {
+    color: #db2777;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .codex-page .codex-md code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.88em;
+    padding: 0.1em 0.35em;
+    border-radius: 0.3rem;
+    background: rgba(244, 114, 182, 0.12);
+  }
+
+  .codex-page .codex-md pre {
+    overflow-x: auto;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(24, 24, 27, 0.06);
+    border: 1px solid rgba(244, 114, 182, 0.2);
+  }
+
+  .codex-page .codex-md pre code {
+    padding: 0;
+    background: transparent;
+  }
+
+  .codex-page .codex-md blockquote {
+    border-left: 3px solid rgba(236, 72, 153, 0.45);
+    padding-left: 0.75rem;
+    color: rgba(74, 25, 66, 0.85);
+  }
+
+  .codex-page .codex-md table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92em;
+  }
+
+  .codex-page .codex-md th,
+  .codex-page .codex-md td {
+    border: 1px solid rgba(244, 114, 182, 0.25);
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+  }
+
+  .codex-page .codex-md th {
+    background: rgba(252, 231, 243, 0.6);
   }
 
   .codex-page .codex-line-user {
