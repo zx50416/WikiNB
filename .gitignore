@@ -9,3 +9,5 @@ dist/
 !**/.env.example
 bridge/node_modules/
 bridge/.env
+帳號密碼.md
+

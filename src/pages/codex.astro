@@ -1,18 +1,19 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import '@fontsource/iansui/chinese-traditional-400.css';
+import '@fontsource/iansui/latin-400.css';
 
 const base = import.meta.env.BASE_URL;
 ---
 
 <BaseLayout title="Codex" description="Kiannne Codex 終端介面">
-  <div class="animate-fadeIn">
+  <div class="animate-fadeIn codex-page">
     <div class="mb-4 flex items-end justify-between gap-4">
       <div>
-        <h1 class="font-display text-3xl font-bold text-berry-800 md:text-4xl">
+        <h1 class="codex-page-title text-3xl font-bold text-berry-800 md:text-4xl">
           <span class="bg-gradient-to-r from-zinc-700 to-zinc-900 bg-clip-text text-transparent">Codex</span>
           <span class="ml-2 text-lg font-normal text-pink-500">× Kiannne</span>
         </h1>
-        <p class="mt-1 text-sm text-berry-700/80">連線本機 Mac · ChatGPT Plus 訂閱額度 · 讀取 wiki 筆記</p>
       </div>
       <a href={base} class="btn-ghost shrink-0 text-sm">← 首頁</a>
     </div>
@@ -26,6 +27,19 @@ const base = import.meta.env.BASE_URL;
     </div>
 
     <div id="codex-terminal" class="codex-terminal hidden">
+      <div class="codex-toolbar">
+        <label class="codex-field">
+          <span>模型 /model</span>
+          <select id="codex-model" class="codex-select"></select>
+        </label>
+        <label class="codex-field">
+          <span>推理强度</span>
+          <select id="codex-effort" class="codex-select"></select>
+        </label>
+      </div>
+
+      <div id="codex-tips" class="codex-tips"></div>
+
       <div id="codex-output" class="codex-output"></div>
       <form id="codex-form" class="codex-input-row">
         <span class="codex-prompt">›</span>
@@ -36,122 +50,513 @@ const base = import.meta.env.BASE_URL;
           placeholder="問你的 wiki 筆記…"
           autocomplete="off"
         />
-        <button type="submit" class="codex-send">送出</button>
+        <button id="codex-stop" type="button" class="codex-stop" disabled>停止</button>
+        <button id="codex-send" type="submit" class="codex-send">送出</button>
       </form>
     </div>
   </div>
-
-  <script>
-    import { isLoggedIn, checkHealth, codexChat } from '../scripts/bridge-client.js';
-
-    const gate = document.getElementById('codex-gate');
-    const offline = document.getElementById('codex-offline');
-    const terminal = document.getElementById('codex-terminal');
-    const output = document.getElementById('codex-output');
-    const form = document.getElementById('codex-form');
-    const input = document.getElementById('codex-input');
-
-    function appendLine(text, role = 'assistant') {
-      const line = document.createElement('div');
-      line.className = `codex-line codex-line-${role}`;
-      line.textContent = text;
-      output?.appendChild(line);
-      output?.scrollTo({ top: output.scrollHeight, behavior: 'smooth' });
-    }
-
-    async function init() {
-      if (!isLoggedIn()) {
-        gate?.classList.remove('hidden');
-        return;
-      }
-
-      const health = await checkHealth();
-      if (!health.online) {
-        offline?.classList.remove('hidden');
-        return;
-      }
-
-      terminal?.classList.remove('hidden');
-      appendLine('Codex 已連線。輸入問題，我會根據 wiki/ 筆記回答。', 'system');
-      input?.focus();
-    }
-
-    form?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const msg = input?.value?.trim();
-      if (!msg) return;
-
-      appendLine(msg, 'user');
-      input.value = '';
-      input.setAttribute('disabled', 'true');
-
-      const thinking = document.createElement('div');
-      thinking.className = 'codex-line codex-line-system';
-      thinking.textContent = '思考中…';
-      output?.appendChild(thinking);
-
-      try {
-        const res = await codexChat(msg);
-        thinking.remove();
-        appendLine(res.answer || '（無回應）', 'assistant');
-      } catch (err) {
-        thinking.remove();
-        appendLine(err.message || 'Codex 執行失敗', 'error');
-      } finally {
-        input.removeAttribute('disabled');
-        input.focus();
-      }
-    });
-
-    init();
-  </script>
 </BaseLayout>
 
-<style>
+<script>
+  import {
+    isLoggedIn,
+    checkHealth,
+    codexChatStream,
+    fetchCodexModels,
+    stopCodex,
+  } from '../scripts/bridge-client.js';
+
+  const gate = document.getElementById('codex-gate');
+  const offline = document.getElementById('codex-offline');
+  const terminal = document.getElementById('codex-terminal');
+  const output = document.getElementById('codex-output');
+  const form = document.getElementById('codex-form');
+  const input = document.getElementById('codex-input');
+  const sendBtn = document.getElementById('codex-send');
+  const stopBtn = document.getElementById('codex-stop');
+  const modelSelect = document.getElementById('codex-model');
+  const effortSelect = document.getElementById('codex-effort');
+  const tipsEl = document.getElementById('codex-tips');
+
+  let abortController = null;
+  let running = false;
+
+  function appendLine(text, role = 'assistant') {
+    const line = document.createElement('div');
+    line.className = `codex-line codex-line-${role}`;
+    const bubble = document.createElement('div');
+    bubble.className = 'codex-bubble';
+    bubble.textContent = text;
+    line.appendChild(bubble);
+    output?.appendChild(line);
+    output?.scrollTo({ top: output.scrollHeight, behavior: 'smooth' });
+    return line;
+  }
+
+  function formatElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return m > 0 ? `${m}分${String(rem).padStart(2, '0')}秒` : `${rem} 秒`;
+  }
+
+  function setRunning(isRunning) {
+    running = isRunning;
+    if (sendBtn) sendBtn.disabled = isRunning;
+    if (stopBtn) {
+      stopBtn.disabled = !isRunning;
+      stopBtn.textContent = '停止';
+    }
+    input?.toggleAttribute('disabled', isRunning);
+    modelSelect?.toggleAttribute('disabled', isRunning);
+    effortSelect?.toggleAttribute('disabled', isRunning);
+  }
+
+  async function loadModels() {
+    try {
+      const data = await fetchCodexModels();
+      modelSelect.innerHTML = '';
+      for (const m of data.models || []) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.label || m.id;
+        if (m.id === data.defaultModel) opt.selected = true;
+        modelSelect.appendChild(opt);
+      }
+      effortSelect.innerHTML = '';
+      for (const e of data.efforts || []) {
+        const opt = document.createElement('option');
+        opt.value = e.id;
+        opt.textContent = e.label || e.id;
+        if (e.id === data.defaultEffort) opt.selected = true;
+        effortSelect.appendChild(opt);
+      }
+      if (tipsEl) {
+        const tip =
+          (data.tips && data.tips[0]) ||
+          '簡單 wiki 問答通常只需 15–60 秒；第一次啟動或面對複雜任務可能需要更久。';
+        tipsEl.textContent = tip;
+      }
+    } catch (err) {
+      if (tipsEl) {
+        tipsEl.textContent =
+          '簡單 wiki 問答通常只需 15–60 秒；第一次啟動或面對複雜任務可能需要更久。';
+      }
+      appendLine(err.message || '無法載入模型列表', 'error');
+    }
+  }
+
+  async function init() {
+    if (!isLoggedIn()) {
+      gate?.classList.remove('hidden');
+      return;
+    }
+
+    const health = await checkHealth();
+    if (!health.online) {
+      offline?.classList.remove('hidden');
+      return;
+    }
+
+    terminal?.classList.remove('hidden');
+    await loadModels();
+    appendLine('Codex 已連線。可選擇模型後送出；執行中可按停止。', 'system');
+    input?.focus();
+  }
+
+  modelSelect?.addEventListener('change', updateModelHint);
+
+  stopBtn?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!running) return;
+    stopBtn.disabled = true;
+    stopBtn.textContent = '停止中…';
+    try {
+      await stopCodex();
+    } catch {
+      /* ignore */
+    }
+    abortController?.abort();
+  });
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (running) return;
+    const msg = input?.value?.trim();
+    if (!msg) return;
+
+    const model = modelSelect?.value || '';
+    const reasoningEffort = effortSelect?.value || 'medium';
+    const modelLabel = modelSelect?.selectedOptions?.[0]?.textContent || model;
+
+    appendLine(msg, 'user');
+    appendLine(`使用模型：${modelLabel} · 推理：${reasoningEffort}`, 'system');
+    input.value = '';
+
+    abortController = new AbortController();
+    setRunning(true);
+
+    const progress = document.createElement('div');
+    progress.className = 'codex-line codex-line-system';
+    const progressBubble = document.createElement('div');
+    progressBubble.className = 'codex-bubble';
+    progressBubble.textContent = '啟動中… 已等待 0 秒（簡單問答常要 15–60 秒）';
+    progress.appendChild(progressBubble);
+    output?.appendChild(progress);
+
+    const liveWrap = document.createElement('div');
+    liveWrap.className = 'codex-line codex-line-live';
+    const liveBubble = document.createElement('div');
+    liveBubble.className = 'codex-bubble';
+    const liveLabel = document.createElement('div');
+    liveLabel.className = 'codex-live-label';
+    liveLabel.textContent = '即時輸出';
+    const liveBody = document.createElement('pre');
+    liveBody.className = 'codex-live-body';
+    liveBubble.appendChild(liveLabel);
+    liveBubble.appendChild(liveBody);
+    liveWrap.appendChild(liveBubble);
+    output?.appendChild(liveWrap);
+
+    let liveText = '';
+    let lastSummary = '啟動中';
+    let lastElapsed = 0;
+
+    const updateProgress = (elapsedMs, summary) => {
+      if (typeof elapsedMs === 'number' && elapsedMs > 0) lastElapsed = elapsedMs;
+      if (summary) lastSummary = summary;
+      const waitHint =
+        lastElapsed < 15000
+          ? '（通常還要再等一會兒）'
+          : lastElapsed < 60000
+            ? '（仍在正常範圍）'
+            : '（較大模型／高推理可能要更久，可按停止）';
+      progressBubble.textContent = `${lastSummary}… 已等待 ${formatElapsed(lastElapsed)} ${waitHint}`;
+      output?.scrollTo({ top: output.scrollHeight, behavior: 'smooth' });
+    };
+
+    try {
+      const result = await codexChatStream(
+        msg,
+        (ev) => {
+          if (ev.type === 'tick') {
+            updateProgress(ev.elapsedMs || 0);
+          } else if (ev.type === 'status') {
+            updateProgress(ev.elapsedMs, ev.message || lastSummary);
+          } else if (ev.type === 'event') {
+            updateProgress(undefined, ev.summary || ev.eventType || '處理中');
+          } else if (ev.type === 'delta' && ev.text) {
+            liveText += (liveText ? '\n' : '') + ev.text;
+            liveBody.textContent = liveText;
+            output?.scrollTo({ top: output.scrollHeight, behavior: 'smooth' });
+          } else if (ev.type === 'log' && ev.text) {
+            liveText += (liveText ? '\n' : '') + ev.text;
+            liveBody.textContent = liveText;
+          }
+        },
+        { model, reasoningEffort, signal: abortController.signal },
+      );
+
+      progress.remove();
+
+      const finalText = result.answer || liveText || '（無回應）';
+
+      // 把即時區升級成最終回覆，避免同一段文字出現兩次
+      liveWrap.className = `codex-line ${result.stopped ? 'codex-line-system' : 'codex-line-assistant'}`;
+      liveBubble.innerHTML = '';
+      const finalBubble = document.createElement('div');
+      finalBubble.className = 'codex-bubble';
+      finalBubble.textContent = finalText;
+      liveWrap.replaceChildren(finalBubble);
+
+      if (
+        !result.stopped &&
+        result.fullLog &&
+        result.fullLog.trim() &&
+        result.fullLog.trim() !== finalText.trim()
+      ) {
+        const details = document.createElement('details');
+        details.className = 'codex-details';
+        const summary = document.createElement('summary');
+        summary.textContent = `完整 Codex 日誌 · ${formatElapsed(result.elapsedMs || 0)} · ${result.model || model}`;
+        const pre = document.createElement('pre');
+        pre.className = 'codex-live-body';
+        pre.textContent = result.fullLog;
+        details.appendChild(summary);
+        details.appendChild(pre);
+        liveWrap.after(details);
+      }
+    } catch (err) {
+      progress.remove();
+      liveWrap.remove();
+      if (err?.name !== 'AbortError') {
+        appendLine(err.message || 'Codex 執行失敗', 'error');
+      } else {
+        appendLine('（已停止）', 'system');
+      }
+    } finally {
+      setRunning(false);
+      abortController = null;
+      input?.removeAttribute('disabled');
+      input?.focus();
+    }
+  });
+
+  init();
+</script>
+
+<style is:global>
+  .codex-page,
   .codex-terminal {
-    @apply overflow-hidden rounded-2xl border border-pink-200/60 shadow-glass-lg;
+    /* 芫荽 Iansui：繁體手寫體，避免簡體字體缺字後穿插系統標楷 */
+    --codex-hand: 'Iansui', 'Noto Sans TC', sans-serif;
+    --codex-latin: 'Iansui', 'Noto Sans TC', sans-serif;
+  }
+
+  .codex-page .codex-page-title {
+    font-family: var(--codex-latin);
+    letter-spacing: 0.02em;
+  }
+
+  .codex-page .codex-terminal {
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid rgba(251, 207, 232, 0.6);
+    box-shadow: 0 8px 32px rgba(236, 64, 122, 0.12);
     background: linear-gradient(160deg, #fff5f8 0%, #fce4ec 30%, #f3e5f5 100%);
+    font-family: var(--codex-hand);
   }
 
-  .codex-output {
-    @apply max-h-[min(60vh,520px)] overflow-y-auto px-5 py-5 font-mono text-sm leading-relaxed;
+  .codex-page .codex-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+    border-bottom: 1px solid rgba(252, 231, 243, 0.8);
+    background: rgba(255, 255, 255, 0.4);
+    padding: 0.75rem 1rem;
+  }
+
+  .codex-page .codex-field {
+    display: flex;
+    min-width: 9rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 11px;
+    font-weight: 600;
+    color: #52525b;
+    font-family: var(--codex-hand);
+  }
+
+  .codex-page .codex-select {
+    border-radius: 0.5rem;
+    border: 1px solid rgba(251, 207, 232, 0.8);
+    background: rgba(255, 255, 255, 0.8);
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+    color: #4a1942;
+    outline: none;
+    font-family: var(--codex-hand);
+  }
+
+  .codex-page .codex-tips {
+    border-bottom: 1px solid rgba(252, 231, 243, 0.8);
+    background: rgba(255, 251, 235, 0.5);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    line-height: 1.625;
+    color: rgba(69, 26, 3, 0.9);
+  }
+
+  .codex-page .codex-output {
+    max-height: min(70vh, 640px);
+    overflow-y: auto;
+    padding: 1.25rem 1rem;
+    font-size: 1rem;
+    line-height: 1.625;
     min-height: 280px;
+    font-family: var(--codex-hand);
   }
 
-  .codex-line {
-    @apply mb-3 whitespace-pre-wrap rounded-xl px-4 py-3;
+  @media (min-width: 768px) {
+    .codex-page .codex-output {
+      padding-left: 1.25rem;
+      padding-right: 1.25rem;
+    }
   }
 
-  .codex-line-user {
-    @apply ml-8 bg-white/60 text-berry-800;
+  .codex-page .codex-line {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    margin-bottom: 1rem;
   }
 
-  .codex-line-assistant {
-    @apply mr-4 border border-pink-100 bg-white/50 text-berry-800;
+  .codex-page .codex-bubble {
+    max-width: min(92%, 36rem);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    padding: 0.75rem 1rem;
   }
 
-  .codex-line-system {
-    @apply text-center text-xs text-pink-500/80;
+  .codex-page .codex-line-user {
+    align-items: flex-end;
+  }
+
+  /* 你的 prompt：靠右氣泡區分即可，字重／顏色與回覆一致 */
+  .codex-page .codex-line-user .codex-bubble {
+    border-radius: 1rem 1rem 0.375rem 1rem;
+    border: 1px solid #fce7f3;
+    background: rgba(255, 255, 255, 0.7);
+    color: #4a1942;
+    font-weight: 400;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+
+  .codex-page .codex-line-assistant {
+    align-items: flex-start;
+  }
+
+  .codex-page .codex-line-assistant .codex-bubble {
+    border-radius: 1rem 1rem 1rem 0.375rem;
+    border: 1px solid #fce7f3;
+    background: rgba(255, 255, 255, 0.7);
+    color: #4a1942;
+    font-weight: 400;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+
+  .codex-page .codex-line-system {
+    align-items: center;
+  }
+
+  .codex-page .codex-line-system .codex-bubble {
+    max-width: 100%;
     background: transparent;
+    padding: 0.25rem 0.5rem;
+    text-align: center;
+    font-size: 0.875rem;
+    color: rgba(236, 72, 153, 0.9);
+    font-weight: 400;
   }
 
-  .codex-line-error {
-    @apply border border-red-200 bg-red-50/80 text-red-800;
+  .codex-page .codex-line-error {
+    align-items: flex-start;
   }
 
-  .codex-input-row {
-    @apply flex items-center gap-2 border-t border-pink-200/60 bg-zinc-900/90 px-4 py-3;
+  .codex-page .codex-line-error .codex-bubble {
+    border-radius: 1rem;
+    border: 1px solid #fecaca;
+    background: rgba(254, 242, 242, 0.8);
+    color: #991b1b;
   }
 
-  .codex-prompt {
-    @apply font-mono text-lg font-bold text-pink-400;
+  .codex-page .codex-line-live {
+    align-items: flex-start;
   }
 
-  .codex-input {
-    @apply min-w-0 flex-1 bg-transparent font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-500;
+  .codex-page .codex-line-live .codex-bubble {
+    border-radius: 1rem 1rem 1rem 0.375rem;
+    border: 1px dashed rgba(212, 212, 216, 0.8);
+    background: rgba(24, 24, 27, 0.05);
+    color: #4a1942;
   }
 
-  .codex-send {
-    @apply rounded-full bg-gradient-to-r from-pink-500 to-lavender-400 px-4 py-1.5 text-xs font-bold text-white transition hover:opacity-90;
+  .codex-page .codex-live-label {
+    margin-bottom: 0.5rem;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #71717a;
+    font-family: var(--codex-latin);
+  }
+
+  .codex-page .codex-live-body {
+    margin: 0;
+    max-height: 12rem;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    font-size: 0.875rem;
+    color: rgba(74, 25, 66, 0.9);
+    font-family: var(--codex-hand);
+  }
+
+  .codex-page .codex-details {
+    margin: 0 auto 1rem 0;
+    max-width: min(92%, 36rem);
+    border-radius: 0.75rem;
+    border: 1px solid rgba(252, 231, 243, 0.8);
+    background: rgba(255, 255, 255, 0.4);
+    padding: 0.75rem 1rem;
+    color: #4a1942;
+  }
+
+  .codex-page .codex-details summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #52525b;
+  }
+
+  .codex-page .codex-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-top: 1px solid rgba(251, 207, 232, 0.6);
+    background: rgba(24, 24, 27, 0.9);
+    padding: 0.75rem 1rem;
+  }
+
+  .codex-page .codex-prompt {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #f472b6;
+    font-family: var(--codex-latin);
+  }
+
+  .codex-page .codex-input {
+    min-width: 0;
+    flex: 1;
+    background: transparent;
+    font-size: 1rem;
+    color: #f4f4f5;
+    outline: none;
+    font-family: var(--codex-hand);
+  }
+
+  .codex-page .codex-input::placeholder {
+    color: #71717a;
+  }
+
+  .codex-page .codex-stop {
+    border-radius: 9999px;
+    background: linear-gradient(to right, #71717a, #3f3f46);
+    padding: 0.375rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+    font-family: var(--codex-latin);
+  }
+
+  .codex-page .codex-stop:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  .codex-page .codex-send {
+    border-radius: 9999px;
+    background: linear-gradient(to right, #ec4899, #c084fc);
+    padding: 0.375rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+    font-family: var(--codex-latin);
+  }
+
+  .codex-page .codex-send:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 </style>

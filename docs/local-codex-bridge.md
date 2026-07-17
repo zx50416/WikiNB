@@ -14,7 +14,7 @@
 | 方法 | 路徑 | 需登入 | 說明 |
 |------|------|--------|------|
 | GET | `/api/health` | 否 | Bridge 是否在線 |
-| POST | `/api/auth/send-code` | 否 | 寄 6 位數驗證碼到 `WIKINB_AUTH_EMAILS` 全部信箱 |
+| POST | `/api/auth/send-code` | 否 | 需 body `{ username, password }`；帳密正確後才寄 6 位數到 `WIKINB_AUTH_EMAILS` |
 | POST | `/api/auth/verify` | 否 | 驗證碼正確 → session token（24h） |
 | POST | `/api/auth/logout` | 是 | 登出 |
 | GET | `/api/auth/me` | 是 | 確認已登入 |
@@ -23,8 +23,8 @@
 
 **登入流程（實作版）：**
 
-1. 使用者開 `/login` → POST `/api/auth/send-code`
-2. 同一組驗證碼寄到 `.env` 中所有信箱（非白名單比對輸入 email）
+1. 使用者開 `/login`，輸入帳號密碼 → POST `/api/auth/send-code`
+2. 帳密正確後，同一組驗證碼寄到 `.env` 中所有信箱（主 + 備援）
 3. POST `/api/auth/verify` { code } → token 存 sessionStorage
 4. 跳回首頁；導覽列顯示登出 + 同步 Wiki；首頁 Search 旁出現 Codex
 

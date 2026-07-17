@@ -71,8 +71,11 @@ export async function checkHealth() {
   }
 }
 
-export async function sendLoginCode() {
-  return bridgeFetch('/api/auth/send-code', { method: 'POST', body: '{}' });
+export async function sendLoginCode(username, password) {
+  return bridgeFetch('/api/auth/send-code', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
 }
 
 export async function verifyLoginCode(code) {
@@ -95,11 +98,102 @@ export async function syncWiki() {
   return bridgeFetch('/api/sync', { method: 'POST', body: '{}' });
 }
 
-export async function codexChat(message) {
+export async function codexChat(message, options = {}) {
   return bridgeFetch('/api/codex/chat', {
     method: 'POST',
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({
+      message,
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+    }),
   });
+}
+
+export async function fetchCodexModels() {
+  return bridgeFetch('/api/codex/models');
+}
+
+export async function stopCodex() {
+  return bridgeFetch('/api/codex/stop', { method: 'POST', body: '{}' });
+}
+
+/**
+ * Stream Codex output via SSE. onEvent receives { type, ... }.
+ * options: { model, reasoningEffort, signal }
+ */
+export async function codexChatStream(message, onEvent = () => {}, options = {}) {
+  const base = getBridgeUrl();
+  const session = getSession();
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  };
+  if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+
+  const res = await fetch(`${base}/api/codex/chat?stream=1`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      message,
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+    }),
+    signal: options.signal,
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || data.detail || `HTTP ${res.status}`);
+  }
+
+  if (!res.body) throw new Error('瀏覽器不支援串流回應');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalPayload = null;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        const line = part
+          .split('\n')
+          .filter((l) => l.startsWith('data:'))
+          .map((l) => l.slice(5).trim())
+          .join('');
+        if (!line) continue;
+        try {
+          const payload = JSON.parse(line);
+          onEvent(payload);
+          if (payload.type === 'done' || payload.type === 'error') {
+            finalPayload = payload;
+          }
+        } catch {
+          onEvent({ type: 'log', text: line });
+        }
+      }
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      return { type: 'done', ok: true, stopped: true, answer: '（已停止）' };
+    }
+    throw err;
+  }
+
+  if (!finalPayload) {
+    throw new Error('Codex 串流中斷，沒有收到完成事件');
+  }
+  if (finalPayload.type === 'error' && !finalPayload.answer) {
+    throw new Error(finalPayload.error || finalPayload.detail || 'Codex 執行失敗');
+  }
+  return finalPayload;
 }
 
 export function mountNavAuth() {

@@ -20,8 +20,9 @@ npm run bridge
 
 | 變數 | 說明 |
 |------|------|
+| `WIKINB_AUTH_USER` / `WIKINB_AUTH_PASS` | 唯一一組登入帳密（正確後才寄驗證碼） |
 | `WIKINB_AUTH_EMAILS` | 兩個信箱，逗號分隔（驗證碼同時寄出） |
-| `SMTP_USER` / `SMTP_PASS` | Gmail + 應用程式密碼 |
+| `SMTP_USER` / `SMTP_PASS` | Gmail + 應用程式密碼（由主信箱寄給自己） |
 | `CORS_ORIGINS` | 含 `https://zx50416.github.io` |
 
 ## 一鍵同步（網頁「同步 Wiki」）

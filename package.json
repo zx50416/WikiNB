@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@astrojs/tailwind": "^6.0.2",
+    "@fontsource/iansui": "^5.2.8",
     "astro": "^5.7.10",
     "fuse.js": "^7.1.0",
     "gray-matter": "^4.0.3",

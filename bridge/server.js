@@ -1,6 +1,6 @@
 import cors from 'cors';
 import crypto from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,9 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 const PORT = Number(process.env.PORT || 8787);
 const PROJECT_ROOT = process.env.PROJECT_ROOT || path.resolve(__dirname, '..');
-const AUTH_EMAILS = (process.env.WIKINB_AUTH_EMAILS || 'chaos60649@gmail.com')
+const AUTH_USER = process.env.WIKINB_AUTH_USER || '';
+const AUTH_PASS = process.env.WIKINB_AUTH_PASS || '';
+const AUTH_EMAILS = (process.env.WIKINB_AUTH_EMAILS || 'chaos60649@gmail.com,st101031616@gmail.com')
   .split(',')
   .map((e) => e.trim())
   .filter(Boolean);
@@ -50,6 +52,11 @@ function randomCode() {
 
 function randomToken() {
   return crypto.randomBytes(32).toString('hex');
+}
+
+function credentialsOk(username, password) {
+  if (!AUTH_USER || !AUTH_PASS) return false;
+  return String(username ?? '') === AUTH_USER && String(password ?? '') === AUTH_PASS;
 }
 
 async function sendCodeEmail(code) {
@@ -110,18 +117,49 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-app.post('/api/auth/send-code', async (_req, res) => {
+app.post('/api/auth/send-code', async (req, res) => {
   try {
+    const { username, password } = req.body || {};
+
+    if (!AUTH_USER || !AUTH_PASS) {
+      res.status(500).json({ error: 'Bridge 尚未設定 WIKINB_AUTH_USER / WIKINB_AUTH_PASS' });
+      return;
+    }
+
+    if (!credentialsOk(username, password)) {
+      res.status(401).json({ error: '帳號或密碼錯誤' });
+      return;
+    }
+
     const code = randomCode();
     pendingCodes.set('login', { code, expiresAt: Date.now() + CODE_TTL_MS });
 
-    await sendCodeEmail(code);
-
-    res.json({
-      ok: true,
-      message: `驗證碼已寄送至 ${AUTH_EMAILS.length} 個信箱`,
-      expiresIn: CODE_TTL_MS / 1000,
-    });
+    try {
+      const sendResult = await sendCodeEmail(code);
+      res.json({
+        ok: true,
+        message: sendResult.dev
+          ? `帳密正確。未設定 SMTP，驗證碼已顯示於 Bridge 終端機（將寄至 ${AUTH_EMAILS.length} 個信箱）`
+          : `帳密正確，驗證碼已寄送至 ${AUTH_EMAILS.length} 個信箱`,
+        expiresIn: CODE_TTL_MS / 1000,
+        dev: Boolean(sendResult.dev),
+      });
+    } catch (mailErr) {
+      console.error('send-code SMTP error:', mailErr.message || mailErr);
+      if (DEV_LOG_CODE) {
+        console.log('\n📧 [FALLBACK] SMTP 失敗，驗證碼改顯示於終端機:', code);
+        console.log('   目標信箱:', AUTH_EMAILS.join(', '), '\n');
+        res.json({
+          ok: true,
+          message: '帳密正確，但 Gmail 寄信失敗。請查看 Bridge 終端機上的驗證碼（並檢查 SMTP_PASS 應用程式密碼）',
+          expiresIn: CODE_TTL_MS / 1000,
+          dev: true,
+        });
+        return;
+      }
+      pendingCodes.delete('login');
+      res.status(500).json({ error: '寄送驗證碼失敗，請檢查 SMTP 設定（Gmail 應用程式密碼）' });
+    }
   } catch (err) {
     console.error('send-code error:', err);
     res.status(500).json({ error: '寄送驗證碼失敗，請檢查 SMTP 設定' });
@@ -164,6 +202,85 @@ app.get('/api/auth/me', authMiddleware, (_req, res) => {
   res.json({ ok: true, authenticated: true });
 });
 
+const CODEX_MODELS = [
+  { id: 'gpt-5.6-terra', label: 'gpt-5.6-terra（預設）' },
+  { id: 'gpt-5.5', label: 'gpt-5.5' },
+  { id: 'gpt-5.3-codex', label: 'gpt-5.3-codex' },
+  { id: 'o3', label: 'o3' },
+  { id: 'o4-mini', label: 'o4-mini' },
+  { id: 'gpt-4.1', label: 'gpt-4.1' },
+];
+
+const CODEX_EFFORTS = [
+  { id: 'low', label: '低（較快）' },
+  { id: 'medium', label: '中（預設）' },
+  { id: 'high', label: '高（較慢、較深）' },
+];
+
+function readCodexDefaultModel() {
+  try {
+    const cfgPath = path.join(process.env.HOME || '', '.codex', 'config.toml');
+    if (!fs.existsSync(cfgPath)) return 'gpt-5.6-terra';
+    const text = fs.readFileSync(cfgPath, 'utf8');
+    const m = text.match(/^\s*model\s*=\s*"([^"]+)"/m);
+    return m?.[1] || 'gpt-5.6-terra';
+  } catch {
+    return 'gpt-5.6-terra';
+  }
+}
+
+function readCodexDefaultEffort() {
+  try {
+    const cfgPath = path.join(process.env.HOME || '', '.codex', 'config.toml');
+    if (!fs.existsSync(cfgPath)) return 'medium';
+    const text = fs.readFileSync(cfgPath, 'utf8');
+    const m = text.match(/^\s*model_reasoning_effort\s*=\s*"([^"]+)"/m);
+    return m?.[1] || 'medium';
+  } catch {
+    return 'medium';
+  }
+}
+
+/** @type {Map<string, import('node:child_process').ChildProcess>} */
+const activeCodexJobs = new Map();
+
+app.get('/api/codex/models', authMiddleware, (_req, res) => {
+  const defaultModel = readCodexDefaultModel();
+  const defaultEffort = readCodexDefaultEffort();
+  const models = [...CODEX_MODELS];
+  if (!models.some((m) => m.id === defaultModel)) {
+    models.unshift({
+      id: defaultModel,
+      label: `${defaultModel}（本機設定）`,
+    });
+  }
+  res.json({
+    ok: true,
+    defaultModel,
+    defaultEffort,
+    models,
+    efforts: CODEX_EFFORTS,
+    tips: [
+      '簡單 wiki 問答通常只需 15–60 秒；第一次啟動或面對複雜任務可能需要更久。',
+    ],
+  });
+});
+
+app.post('/api/codex/stop', authMiddleware, (req, res) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const child = activeCodexJobs.get(token);
+  if (!child || child.killed) {
+    res.json({ ok: true, stopped: false, message: '目前沒有執行中的 Codex' });
+    return;
+  }
+  child.kill('SIGTERM');
+  setTimeout(() => {
+    if (!child.killed) child.kill('SIGKILL');
+  }, 1500);
+  res.json({ ok: true, stopped: true, message: '已送出停止訊號' });
+});
+
 app.post('/api/sync', authMiddleware, async (_req, res) => {
   try {
     let gitPush = false;
@@ -198,11 +315,16 @@ app.post('/api/sync', authMiddleware, async (_req, res) => {
 });
 
 app.post('/api/codex/chat', authMiddleware, async (req, res) => {
-  const { message } = req.body || {};
+  const { message, model, reasoningEffort } = req.body || {};
   if (!message?.trim()) {
     res.status(400).json({ error: '請輸入訊息' });
     return;
   }
+
+  const chosenModel = String(model || readCodexDefaultModel()).trim();
+  const chosenEffort = String(reasoningEffort || readCodexDefaultEffort()).trim();
+  const allowedEffort = new Set(CODEX_EFFORTS.map((e) => e.id));
+  const effort = allowedEffort.has(chosenEffort) ? chosenEffort : 'medium';
 
   const wikiDir = path.join(PROJECT_ROOT, 'wiki');
   let wikiContext = '';
@@ -220,28 +342,288 @@ ${wikiContext}
 
 使用者問題：${message.trim()}`;
 
-  try {
-    const { stdout, stderr } = await execFileAsync(
-      'codex',
-      ['exec', '--sandbox', 'read-only', '--ephemeral', prompt],
-      { cwd: PROJECT_ROOT, timeout: 180000, maxBuffer: 10 * 1024 * 1024 },
-    );
+  const authHeader = req.headers.authorization || '';
+  const sessionToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
 
-    const answer = stdout?.trim() || stderr?.trim() || '（Codex 未回傳內容）';
-    res.json({ ok: true, answer });
-  } catch (err) {
-    console.error('codex error:', err);
-    const msg = err.stderr || err.message || String(err);
-    res.status(500).json({
-      error: 'Codex 執行失敗。請確認 Mac 上已安裝 Codex CLI 並以 ChatGPT 帳號登入。',
-      detail: msg.slice(0, 500),
-    });
+  const codexArgs = [
+    'exec',
+    '--json',
+    '--color',
+    'never',
+    '--sandbox',
+    'read-only',
+    '--ephemeral',
+    '-m',
+    chosenModel,
+    '-c',
+    `model_reasoning_effort="${effort}"`,
+    '-',
+  ];
+
+  const wantStream =
+    String(req.query.stream || '') === '1' ||
+    (req.headers.accept || '').includes('text/event-stream');
+
+  if (!wantStream) {
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        'codex',
+        [
+          'exec',
+          '--color',
+          'never',
+          '--sandbox',
+          'read-only',
+          '--ephemeral',
+          '-m',
+          chosenModel,
+          '-c',
+          `model_reasoning_effort="${effort}"`,
+          '-',
+        ],
+        {
+          cwd: PROJECT_ROOT,
+          timeout: 180000,
+          maxBuffer: 10 * 1024 * 1024,
+          input: prompt,
+        },
+      );
+      const answer = stdout?.trim() || stderr?.trim() || '（Codex 未回傳內容）';
+      res.json({ ok: true, answer, model: chosenModel, reasoningEffort: effort });
+    } catch (err) {
+      console.error('codex error:', err);
+      const msg = err.stderr || err.message || String(err);
+      res.status(500).json({
+        error: 'Codex 執行失敗。請確認 Mac 上已安裝 Codex CLI 並以 ChatGPT 帳號登入。',
+        detail: msg.slice(0, 500),
+      });
+    }
+    return;
   }
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const send = (payload) => {
+    if (res.writableEnded) return;
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  send({
+    type: 'status',
+    message: `正在啟動 Codex（${chosenModel} · ${effort}）…`,
+    model: chosenModel,
+    reasoningEffort: effort,
+  });
+
+  const startedAt = Date.now();
+  const tick = setInterval(() => {
+    send({ type: 'tick', elapsedMs: Date.now() - startedAt });
+  }, 1000);
+
+  let buffer = '';
+  let fullLog = '';
+  let answerParts = [];
+  let stoppedByUser = false;
+
+  const child = spawn('codex', codexArgs, {
+    cwd: PROJECT_ROOT,
+    env: process.env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  if (sessionToken) activeCodexJobs.set(sessionToken, child);
+
+  child.stdin.write(prompt);
+  child.stdin.end();
+
+  const handleChunk = (chunk, source) => {
+    const text = chunk.toString('utf8');
+    fullLog += text;
+    buffer += text;
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      let parsed = null;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        send({ type: 'log', source, text: trimmed });
+        continue;
+      }
+
+      const extracted = extractCodexText(parsed);
+      if (extracted) {
+        answerParts.push(extracted);
+        send({ type: 'delta', text: extracted });
+      }
+
+      send({
+        type: 'event',
+        eventType: parsed.type || parsed.msg?.type || 'unknown',
+        summary: summarizeCodexEvent(parsed),
+        raw: trimmed.length > 4000 ? `${trimmed.slice(0, 4000)}…` : trimmed,
+      });
+    }
+  };
+
+  child.stdout.on('data', (c) => handleChunk(c, 'stdout'));
+  child.stderr.on('data', (c) => handleChunk(c, 'stderr'));
+
+  const killTimer = setTimeout(() => {
+    send({ type: 'status', message: '超過 3 分鐘，正在停止 Codex…' });
+    child.kill('SIGTERM');
+  }, 180000);
+
+  const cleanupJob = () => {
+    clearInterval(tick);
+    clearTimeout(killTimer);
+    if (sessionToken && activeCodexJobs.get(sessionToken) === child) {
+      activeCodexJobs.delete(sessionToken);
+    }
+  };
+
+  // 注意：不要用 req.on('close')——body 讀完就會觸發，會誤殺剛啟動的 Codex
+  res.on('close', () => {
+    if (res.writableEnded) return;
+    stoppedByUser = true;
+    cleanupJob();
+    if (!child.killed) {
+      child.kill('SIGTERM');
+      setTimeout(() => {
+        if (!child.killed) child.kill('SIGKILL');
+      }, 1500);
+    }
+  });
+
+  child.on('error', (err) => {
+    cleanupJob();
+    send({
+      type: 'error',
+      error: '無法啟動 Codex CLI',
+      detail: String(err.message || err),
+    });
+    if (!res.writableEnded) res.end();
+  });
+
+  child.on('close', (code) => {
+    cleanupJob();
+
+    if (buffer.trim()) {
+      handleChunk(Buffer.from(`${buffer}\n`), 'stdout');
+      buffer = '';
+    }
+
+    const answer =
+      answerParts.join('\n').trim() ||
+      fullLog.trim() ||
+      (stoppedByUser
+        ? '（已停止）'
+        : code === 0
+          ? '（Codex 未回傳可顯示的文字）'
+          : `Codex 結束，代碼 ${code}`);
+
+    if (res.writableEnded) return;
+
+    if (stoppedByUser) {
+      send({
+        type: 'done',
+        ok: true,
+        stopped: true,
+        answer,
+        fullLog,
+        exitCode: code ?? 0,
+        elapsedMs: Date.now() - startedAt,
+        model: chosenModel,
+        reasoningEffort: effort,
+      });
+    } else if (code && code !== 0 && !answerParts.length) {
+      send({
+        type: 'error',
+        error: 'Codex 執行失敗',
+        detail: fullLog.slice(-800) || `exit ${code}`,
+        answer,
+        elapsedMs: Date.now() - startedAt,
+        model: chosenModel,
+        reasoningEffort: effort,
+      });
+    } else {
+      send({
+        type: 'done',
+        ok: true,
+        answer,
+        fullLog,
+        exitCode: code ?? 0,
+        elapsedMs: Date.now() - startedAt,
+        model: chosenModel,
+        reasoningEffort: effort,
+      });
+    }
+    res.end();
+  });
 });
+
+function extractCodexText(ev) {
+  if (!ev || typeof ev !== 'object') return '';
+
+  const candidates = [];
+  const push = (v) => {
+    if (typeof v === 'string' && v.trim()) candidates.push(v.trim());
+  };
+
+  push(ev.text);
+  push(ev.message);
+  push(ev.content);
+  push(ev.delta);
+  push(ev.msg?.message);
+  push(ev.msg?.text);
+  push(ev.item?.text);
+  push(ev.item?.content);
+  push(ev.item?.message);
+
+  if (Array.isArray(ev.content)) {
+    for (const part of ev.content) {
+      if (typeof part === 'string') push(part);
+      else if (part?.text) push(part.text);
+    }
+  }
+
+  const type = String(ev.type || ev.msg?.type || '');
+  const itemType = String(ev.item?.type || '');
+  const interesting =
+    /agent_message|output_text|message\.delta|response\.output|assistant/i.test(type) ||
+    /agent_message|message/i.test(itemType);
+
+  if (interesting) return candidates[0] || '';
+  // item.completed with agent message body
+  if (type.includes('item.') && itemType.includes('agent_message')) {
+    return candidates[0] || '';
+  }
+  return '';
+}
+
+function summarizeCodexEvent(ev) {
+  const t = ev.type || ev.msg?.type || ev.item?.type || 'event';
+  if (/reasoning|thinking|thinking_delta/i.test(t)) return '思考中';
+  if (/agent_message|message/i.test(t)) return '產生回覆';
+  if (/tool|command|exec/i.test(t)) return '執行工具';
+  if (/error/i.test(t)) return '錯誤';
+  if (/task_complete|turn_complete|done/i.test(t)) return '完成';
+  return t;
+}
 
 app.listen(PORT, () => {
   console.log(`\n🌸 WikiNB Bridge running on http://localhost:${PORT}`);
   console.log(`   Project: ${PROJECT_ROOT}`);
+  console.log(`   Auth user: ${AUTH_USER ? 'set' : 'MISSING'}`);
   console.log(`   Auth emails: ${AUTH_EMAILS.join(', ')}`);
+  console.log(`   SMTP: ${process.env.SMTP_USER && process.env.SMTP_PASS ? 'configured' : 'DEV (codes in terminal)'}`);
   console.log(`   CORS: ${CORS_ORIGINS.join(', ')}\n`);
 });

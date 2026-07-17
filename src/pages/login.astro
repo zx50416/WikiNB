@@ -4,11 +4,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 const base = import.meta.env.BASE_URL;
 ---
 
-<BaseLayout title="登入" description="Email 驗證碼登入 WikiNB">
+<BaseLayout title="登入" description="帳號密碼與 Email 驗證碼登入 WikiNB">
   <div class="animate-fadeIn mx-auto max-w-md">
     <h1 class="font-display text-3xl font-bold text-berry-800">登入</h1>
     <p class="mt-3 text-berry-700/80">
-      驗證碼會同時寄到你的兩個信箱。登入後可使用 Codex 與 Wiki 同步。
+      先輸入帳號密碼；正確後驗證碼會寄到你的信箱（主信箱與備援同一組碼）。
     </p>
 
     <div id="bridge-offline" class="glass-card mt-6 hidden border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-900">
@@ -16,11 +16,27 @@ const base = import.meta.env.BASE_URL;
     </div>
 
     <div class="glass-card mt-8 p-6 md:p-8">
-      <div id="step-send">
-        <p class="text-sm text-berry-600/80">按下後，六位數驗證碼會寄到你的信箱。</p>
+      <div id="step-credentials">
+        <label class="mb-2 block text-sm font-semibold text-berry-700">帳號</label>
+        <input
+          id="input-username"
+          type="text"
+          autocomplete="username"
+          class="search-input"
+          placeholder="帳號"
+        />
+        <label class="mb-2 mt-4 block text-sm font-semibold text-berry-700">密碼</label>
+        <input
+          id="input-password"
+          type="password"
+          autocomplete="current-password"
+          class="search-input"
+          placeholder="密碼"
+        />
         <button id="btn-send-code" type="button" class="btn-primary mt-4 w-full justify-center">
-          寄送驗證碼
+          登入並寄送驗證碼
         </button>
+        <p id="login-error" class="mt-2 hidden text-center text-sm text-red-600" role="alert"></p>
       </div>
 
       <div id="step-verify" class="mt-6 hidden">
@@ -36,6 +52,7 @@ const base = import.meta.env.BASE_URL;
         <button id="btn-verify" type="button" class="btn-primary mt-4 w-full justify-center">
           驗證並登入
         </button>
+        <p id="verify-error" class="mt-2 hidden text-center text-sm text-red-600" role="alert"></p>
       </div>
 
       <p id="login-status" class="mt-4 text-center text-sm text-berry-600/80"></p>
@@ -45,58 +62,113 @@ const base = import.meta.env.BASE_URL;
       <a href={base} class="text-sm font-semibold text-pink-600 hover:text-pink-700">← 回到首頁</a>
     </p>
   </div>
-
-  <script define:vars={{ base }}>
-    import {
-      checkHealth,
-      sendLoginCode,
-      verifyLoginCode,
-      setSession,
-    } from '../scripts/bridge-client.js';
-
-    const offlineEl = document.getElementById('bridge-offline');
-    const stepSend = document.getElementById('step-send');
-    const stepVerify = document.getElementById('step-verify');
-    const btnSend = document.getElementById('btn-send-code');
-    const btnVerify = document.getElementById('btn-verify');
-    const inputCode = document.getElementById('input-code');
-    const statusEl = document.getElementById('login-status');
-
-    checkHealth().then((h) => {
-      if (!h.online) offlineEl?.classList.remove('hidden');
-    });
-
-    btnSend?.addEventListener('click', async () => {
-      btnSend.setAttribute('disabled', 'true');
-      statusEl.textContent = '寄送中…';
-      try {
-        const res = await sendLoginCode();
-        statusEl.textContent = res.message || '驗證碼已寄出';
-        stepVerify?.classList.remove('hidden');
-        inputCode?.focus();
-      } catch (err) {
-        statusEl.textContent = err.message || '寄送失敗';
-      } finally {
-        btnSend.removeAttribute('disabled');
-      }
-    });
-
-    btnVerify?.addEventListener('click', async () => {
-      const code = inputCode?.value?.trim();
-      if (!code || code.length !== 6) {
-        statusEl.textContent = '請輸入 6 位數驗證碼';
-        return;
-      }
-      btnVerify.setAttribute('disabled', 'true');
-      statusEl.textContent = '驗證中…';
-      try {
-        const res = await verifyLoginCode(code);
-        setSession({ token: res.token, expiresAt: res.expiresAt });
-        window.location.href = base;
-      } catch (err) {
-        statusEl.textContent = err.message || '驗證失敗';
-        btnVerify.removeAttribute('disabled');
-      }
-    });
-  </script>
 </BaseLayout>
+
+<script>
+  import {
+    checkHealth,
+    sendLoginCode,
+    verifyLoginCode,
+    setSession,
+    getBridgeUrl,
+  } from '../scripts/bridge-client.js';
+
+  function homeUrl() {
+    return document.documentElement.dataset.base || '/';
+  }
+
+  function showError(el, message) {
+    if (!el) return;
+    if (message) {
+      el.textContent = message;
+      el.classList.remove('hidden');
+    } else {
+      el.textContent = '';
+      el.classList.add('hidden');
+    }
+  }
+
+  function markCodeSent(btn) {
+    if (!btn) return;
+    btn.textContent = '驗證碼已寄送';
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-sent');
+    btn.setAttribute('disabled', 'true');
+  }
+
+  const offlineEl = document.getElementById('bridge-offline');
+  const stepVerify = document.getElementById('step-verify');
+  const btnSend = document.getElementById('btn-send-code');
+  const btnVerify = document.getElementById('btn-verify');
+  const inputUsername = document.getElementById('input-username');
+  const inputPassword = document.getElementById('input-password');
+  const inputCode = document.getElementById('input-code');
+  const statusEl = document.getElementById('login-status');
+  const loginError = document.getElementById('login-error');
+  const verifyError = document.getElementById('verify-error');
+
+  checkHealth().then((h) => {
+    if (!h.online) {
+      offlineEl?.classList.remove('hidden');
+      showError(loginError, `無法連線 Bridge（${getBridgeUrl()}）`);
+    }
+  });
+
+  btnSend?.addEventListener('click', async () => {
+    showError(loginError, '');
+    statusEl.textContent = '';
+
+    const username = inputUsername?.value?.trim() || '';
+    const password = inputPassword?.value || '';
+    if (!username || !password) {
+      showError(loginError, '請輸入帳號與密碼');
+      return;
+    }
+
+    btnSend.setAttribute('disabled', 'true');
+    const originalLabel = btnSend.textContent;
+    btnSend.textContent = '寄送中…';
+    statusEl.textContent = '驗證帳密並寄送中…';
+
+    try {
+      const res = await sendLoginCode(username, password);
+      markCodeSent(btnSend);
+      statusEl.textContent = res.message || '驗證碼已寄出，請查收信箱';
+      stepVerify?.classList.remove('hidden');
+      inputCode?.focus();
+    } catch (err) {
+      const msg = err?.message || '登入失敗';
+      const isAuthFail = /帳號或密碼/.test(msg);
+      showError(loginError, isAuthFail ? '帳號或密碼不正確' : msg);
+      statusEl.textContent = '';
+      btnSend.textContent = originalLabel || '登入並寄送驗證碼';
+      btnSend.removeAttribute('disabled');
+    }
+  });
+
+  btnVerify?.addEventListener('click', async () => {
+    showError(verifyError, '');
+    const code = inputCode?.value?.trim();
+    if (!code || code.length !== 6) {
+      showError(verifyError, '請輸入 6 位數驗證碼');
+      return;
+    }
+    btnVerify.setAttribute('disabled', 'true');
+    statusEl.textContent = '驗證中…';
+    try {
+      const res = await verifyLoginCode(code);
+      setSession({ token: res.token, expiresAt: res.expiresAt });
+      window.location.href = homeUrl();
+    } catch (err) {
+      showError(verifyError, err?.message || '驗證失敗');
+      statusEl.textContent = '';
+      btnVerify.removeAttribute('disabled');
+    }
+  });
+</script>
+
+<style>
+  .btn-sent {
+    @apply inline-flex w-full cursor-default items-center justify-center gap-2 rounded-full bg-gradient-to-r from-zinc-700 via-zinc-800 to-zinc-900 px-6 py-2.5 font-display font-semibold text-white shadow-[0_0_20px_rgba(0,0,0,0.25)];
+  }
+</style>
