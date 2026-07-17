@@ -164,8 +164,6 @@ const base = import.meta.env.BASE_URL;
     input?.focus();
   }
 
-  modelSelect?.addEventListener('change', updateModelHint);
-
   stopBtn?.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
