@@ -1,0 +1,46 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import WikiCard from '../../components/WikiCard.astro';
+import { getAllWikiPages, getAllTags } from '../../lib/wiki';
+
+const pages = getAllWikiPages();
+const tags = getAllTags(pages);
+---
+
+<BaseLayout title="Wiki 索引" description="瀏覽所有 Wiki 筆記">
+  <div class="animate-fadeIn">
+    <h1 class="font-display text-3xl font-bold text-berry-800 md:text-4xl">📚 Wiki 索引</h1>
+    <p class="mt-2 text-berry-700/80">共 {pages.length} 篇筆記</p>
+
+    {tags.length > 0 && (
+      <div class="mt-6 flex flex-wrap gap-2">
+        {tags.map(({ tag, count }) => (
+          <a
+            href={`/search?q=${encodeURIComponent(tag)}`}
+            class="tag-badge transition-colors hover:bg-pink-200"
+          >
+            {tag} ({count})
+          </a>
+        ))}
+      </div>
+    )}
+
+    <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {pages.map((page) => (
+        <WikiCard
+          slug={page.slug}
+          title={page.title}
+          description={page.description}
+          tags={page.tags}
+          date={page.date}
+        />
+      ))}
+    </div>
+
+    {pages.length === 0 && (
+      <div class="glass-card mt-8 p-8 text-center">
+        <p class="text-berry-700/80">還沒有 Wiki 頁面。把筆記放到 raw/inbox/ 並請 AI 整理吧！</p>
+      </div>
+    )}
+  </div>
+</BaseLayout>

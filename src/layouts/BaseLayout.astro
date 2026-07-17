@@ -1,0 +1,32 @@
+---
+import '../styles/global.css';
+import Header from '../components/Header.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'WikiNB — 你的夢幻知識花園' } = Astro.props;
+const fullTitle = title === 'WikiNB' ? title : `${title} · WikiNB`;
+---
+
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>" />
+    <title>{fullTitle}</title>
+  </head>
+  <body class="bg-blobs">
+    <Header />
+    <main class="mx-auto max-w-6xl px-4 pb-16 pt-24 md:px-8">
+      <slot />
+    </main>
+    <footer class="border-t border-pink-100/60 bg-white/30 py-8 text-center text-sm text-berry-700/70 backdrop-blur-sm">
+      <p>🌸 WikiNB — 由 AI 整理，由你探索</p>
+    </footer>
+  </body>
+</html>

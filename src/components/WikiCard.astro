@@ -1,0 +1,22 @@
+---
+interface Props {
+  slug: string;
+  title: string;
+  description: string;
+  tags: string[];
+  date: string;
+}
+
+const { slug, title, description, tags, date } = Astro.props;
+---
+
+<a href={`/wiki/${slug}`} class="glass-card-hover block p-5 md:p-6">
+  <div class="mb-2 flex flex-wrap items-center gap-2">
+    <time class="text-xs font-semibold text-pink-500">{date}</time>
+    {tags.slice(0, 3).map((tag) => (
+      <span class="tag-badge">{tag}</span>
+    ))}
+  </div>
+  <h3 class="font-display text-lg font-bold text-berry-800 md:text-xl">{title}</h3>
+  <p class="mt-2 line-clamp-2 text-sm leading-relaxed text-berry-700/80">{description}</p>
+</a>

@@ -1,0 +1,82 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SearchBar from '../components/SearchBar.astro';
+import WikiCard from '../components/WikiCard.astro';
+import { getAllWikiPages } from '../lib/wiki';
+
+const pages = getAllWikiPages();
+const recent = pages.slice(0, 6);
+const allTags = [...new Set(pages.flatMap((p) => p.tags))].slice(0, 8);
+---
+
+<BaseLayout title="WikiNB" description="你的夢幻知識花園 — 個人 AI 知識庫">
+  <section class="animate-fadeIn mb-16 text-center">
+    <div class="mb-6 inline-block animate-float text-5xl">🌸</div>
+    <h1 class="font-display text-4xl font-bold md:text-5xl lg:text-6xl">
+      <span class="bg-gradient-to-r from-pink-500 via-pink-400 to-lavender-400 bg-clip-text text-transparent">
+        WikiNB
+      </span>
+    </h1>
+    <p class="mx-auto mt-4 max-w-xl text-lg text-berry-700/80">
+      你的夢幻知識花園 — 把筆記交給 AI 整理，在這裡輕鬆複習
+    </p>
+    <div class="mx-auto mt-8 max-w-lg">
+      <SearchBar size="lg" placeholder="輸入關鍵字，找到你的筆記…" />
+    </div>
+    <div class="mt-6 flex flex-wrap justify-center gap-3">
+      <a href="/wiki" class="btn-primary">探索 Wiki</a>
+      <a href="/wiki/welcome" class="btn-ghost">新手指南</a>
+    </div>
+  </section>
+
+  {allTags.length > 0 && (
+    <section class="mb-12">
+      <h2 class="mb-4 font-display text-lg font-bold text-berry-700">熱門標籤</h2>
+      <div class="flex flex-wrap gap-2">
+        {allTags.map((tag) => (
+          <a href={`/search?q=${encodeURIComponent(tag)}`} class="tag-badge transition-colors hover:bg-pink-200">
+            {tag}
+          </a>
+        ))}
+      </div>
+    </section>
+  )}
+
+  <section>
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="font-display text-2xl font-bold text-berry-800">最近更新</h2>
+      <a href="/wiki" class="text-sm font-semibold text-pink-600 hover:text-pink-700">
+        查看全部 →
+      </a>
+    </div>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {recent.map((page) => (
+        <WikiCard
+          slug={page.slug}
+          title={page.title}
+          description={page.description}
+          tags={page.tags}
+          date={page.date}
+        />
+      ))}
+    </div>
+  </section>
+
+  <section class="mt-16 glass-card p-6 md:p-8">
+    <h2 class="font-display text-xl font-bold text-berry-800">快速開始</h2>
+    <ol class="mt-4 space-y-3 text-berry-700/90">
+      <li class="flex gap-3">
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-pink-200/80 text-sm font-bold text-pink-700">1</span>
+        <span>把原始筆記放到 <code class="rounded bg-pink-100 px-1.5 py-0.5 text-sm">raw/inbox/</code></span>
+      </li>
+      <li class="flex gap-3">
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-pink-200/80 text-sm font-bold text-pink-700">2</span>
+        <span>告訴 Cursor：「我新增了筆記，請 ingest 到 wiki」</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-pink-200/80 text-sm font-bold text-pink-700">3</span>
+        <span>在這裡搜尋、瀏覽、複習整理好的筆記</span>
+      </li>
+    </ol>
+  </section>
+</BaseLayout>

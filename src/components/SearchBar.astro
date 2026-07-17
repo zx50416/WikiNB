@@ -1,0 +1,29 @@
+---
+interface Props {
+  placeholder?: string;
+  size?: 'sm' | 'lg';
+  action?: string;
+}
+
+const {
+  placeholder = '搜尋筆記…',
+  size = 'sm',
+  action = '/search',
+} = Astro.props;
+---
+
+<form action={action} method="get" class="relative w-full">
+  <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-pink-400">
+    🔍
+  </span>
+  <input
+    type="search"
+    name="q"
+    placeholder={placeholder}
+    class:list={[
+      'search-input',
+      size === 'lg' && 'py-4 text-lg',
+    ]}
+    autocomplete="off"
+  />
+</form>
