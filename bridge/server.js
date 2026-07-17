@@ -352,7 +352,7 @@ function safeInboxFilename(name) {
 }
 
 /** 僅儲存到 raw/inbox，不做 AI 整理 */
-app.post('/api/raw/upload', authMiddleware, async (req, res) => {
+async function handleRawUpload(req, res) {
   const { filename, content } = req.body || {};
   if (!content || !String(content).trim()) {
     res.status(400).json({ error: '請提供筆記內容' });
@@ -379,7 +379,11 @@ app.post('/api/raw/upload', authMiddleware, async (req, res) => {
       detail: String(err.message || err).slice(0, 400),
     });
   }
-});
+}
+
+app.post('/api/raw/upload', authMiddleware, handleRawUpload);
+// 相容舊前端路徑（僅存檔，不整理 wiki）
+app.post('/api/ingest', authMiddleware, handleRawUpload);
 
 app.post('/api/codex/chat', authMiddleware, async (req, res) => {
   const { message, model, reasoningEffort } = req.body || {};

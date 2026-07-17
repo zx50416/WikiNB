@@ -99,7 +99,7 @@ export async function syncWiki() {
 }
 
 export async function uploadRawNote({ filename, content }) {
-  return bridgeFetch('/api/raw/upload', {
+  return bridgeFetch('/api/ingest', {
     method: 'POST',
     body: JSON.stringify({ filename, content }),
   });
