@@ -130,7 +130,7 @@ npm run bridge   # 啟動本機 Bridge（登入 / Codex / 同步）
 
 使用者按「同步 Wiki」或你整理完 wiki 後：
 
-1. 確認 `bridge/.env` 已設定 `GITHUB_TOKEN` + `AUTO_GIT_PUSH=true`
+1. 確認 `bridge/.env` 已設定 `AUTO_GIT_PUSH=true`（本機 git 推不上去時再加 `GITHUB_TOKEN`）
 2. 網站端登入 → 按「同步 Wiki」
 3. GitHub Actions 自動 rebuild，約 1–2 分鐘後網站更新
 

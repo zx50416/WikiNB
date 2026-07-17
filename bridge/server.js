@@ -292,30 +292,56 @@ app.post('/api/sync', authMiddleware, async (_req, res) => {
 });
 
 async function runWikiSync() {
-  let gitPush = false;
+  const autoPush = process.env.AUTO_GIT_PUSH === 'true';
 
-  if (process.env.AUTO_GIT_PUSH === 'true' && process.env.GITHUB_TOKEN) {
-    await execFileAsync('git', ['add', 'wiki/'], { cwd: PROJECT_ROOT });
-    await execFileAsync(
-      'git',
-      ['commit', '-m', 'sync: update wiki from Bridge', '--allow-empty'],
-      { cwd: PROJECT_ROOT },
-    ).catch(() => {});
-    await execFileAsync('git', ['push'], {
-      cwd: PROJECT_ROOT,
-      env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN },
-    });
-    gitPush = true;
-  } else {
+  if (!autoPush) {
     await execFileAsync('npm', ['run', 'build'], { cwd: PROJECT_ROOT, timeout: 120000 });
+    return {
+      ok: true,
+      message:
+        'Wiki 已在本機重新建置（dist/）。若要自動推上 GitHub，請在 bridge/.env 設定 AUTO_GIT_PUSH=true',
+      gitPush: false,
+    };
+  }
+
+  await execFileAsync('git', ['add', 'wiki/'], { cwd: PROJECT_ROOT });
+  const commitEnv = { ...process.env };
+  try {
+    await execFileAsync('git', ['commit', '-m', 'sync: update wiki from Bridge'], {
+      cwd: PROJECT_ROOT,
+      env: commitEnv,
+    });
+  } catch (err) {
+    const msg = String(err.stdout || err.stderr || err.message || '');
+    if (!/nothing to commit|no changes added|clean working tree/i.test(msg)) {
+      console.warn('git commit:', msg.slice(0, 300));
+    }
+  }
+
+  const pushEnv = { ...process.env };
+  const token = process.env.GITHUB_TOKEN?.trim();
+  if (token) {
+    // Prefer token when provided; otherwise use Mac 既有 git 憑證
+    pushEnv.GIT_ASKPASS = 'echo';
+    pushEnv.GIT_TERMINAL_PROMPT = '0';
+    const remote = `https://x-access-token:${token}@github.com/zx50416/WikiNB.git`;
+    await execFileAsync('git', ['push', remote, 'HEAD:main'], {
+      cwd: PROJECT_ROOT,
+      env: pushEnv,
+      timeout: 120000,
+    });
+  } else {
+    await execFileAsync('git', ['push', 'origin', 'HEAD'], {
+      cwd: PROJECT_ROOT,
+      env: pushEnv,
+      timeout: 120000,
+    });
   }
 
   return {
     ok: true,
-    message: gitPush
-      ? 'Wiki 已推送至 GitHub，Pages 將自動重新部署'
-      : 'Wiki 已在本機重新建置（dist/）。若要雲端同步，請在 bridge/.env 設定 GITHUB_TOKEN 與 AUTO_GIT_PUSH=true',
-    gitPush,
+    message: 'Wiki 已推送至 GitHub，Pages 將自動重新部署（約 1–2 分鐘）',
+    gitPush: true,
   };
 }
 

@@ -25,16 +25,17 @@ npm run bridge
 | `SMTP_USER` / `SMTP_PASS` | Gmail + 應用程式密碼（由主信箱寄給自己） |
 | `CORS_ORIGINS` | 含 `https://zx50416.github.io` |
 
-## 一鍵同步（網頁「同步 Wiki」）
+## 一鍵同步（網頁「同步 Wiki」或拖放 ingest 後）
 
 在 `bridge/.env` 設定：
 
 ```env
-GITHUB_TOKEN=ghp_你的PAT
 AUTO_GIT_PUSH=true
+# 可選：GITHUB_TOKEN=ghp_你的PAT
 ```
 
-按下網站導覽列的「同步 Wiki」會 `git add wiki/`、`commit`、`push`，GitHub Actions 自動 rebuild Pages。
+`AUTO_GIT_PUSH=true` 時會 `git add wiki/` → `commit` → `push`。  
+若本機 git 已能推 GitHub，可不填 token；推不上去再加 PAT。
 
 ## 遠端連線（Tailscale）
 
